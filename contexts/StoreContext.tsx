@@ -1,12 +1,21 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
-import { Product, CartItem, ClientInfo, Settings, EvaluationData } from '../types';
+import { Product, CartItem, ClientInfo, Settings, EvaluationData, KnowledgeSource } from '../types';
 import { PRODUCT_CATALOG, detectSmartCategory } from '../constants';
 
 // --- 1. PRODUCT & SETTINGS CONTEXT ---
 interface ProductContextType {
-  products: Product[];
+  // Live Catalog (Backward Compatible)
+  products: Product[]; 
   setProducts: (products: Product[]) => void;
+  
+  // Staging Catalog (Knowledge System)
+  stagingProducts: Product[];
+  setStagingProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  commitStagingToLive: () => void;
+  discardStaging: () => void;
+  
+  // Settings & Utils
   settings: Settings;
   setSettings: (settings: Settings) => void;
   saveProducts: () => void;
@@ -26,7 +35,8 @@ const HARDCODED_DEFAULTS: Record<string, string[]> = {
 export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<Settings>({ minDeliveryAmount: 1000, magicienVarietyMode: 'balanced' });
   
-  const [products, setProducts] = useState<Product[]>(() => {
+  // LIVE CATALOG: The single source of truth for the shop
+  const [liveCatalog, setLiveCatalog] = useState<Product[]>(() => {
     try {
         const saved = localStorage.getItem('amq_products_v1');
         let initialProducts = saved ? JSON.parse(saved) : PRODUCT_CATALOG; 
@@ -34,17 +44,35 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
             ...p,
             category: detectSmartCategory(p.name, p.category),
             isAvailable: true,
-            // Re-calc management category to ensure data integrity
-            managementCategory: p.managementCategory || 'base' 
+            managementCategory: p.managementCategory || 'base',
+            // Default KM fields for legacy data
+            source: p.source || 'system',
+            stagingStatus: 'live',
+            confidenceScore: p.confidenceScore ?? 1
         }));
     } catch (e) {
         return PRODUCT_CATALOG;
     }
   });
 
+  // STAGING CATALOG: Incoming data buffer
+  const [stagingCatalog, setStagingCatalog] = useState<Product[]>(() => {
+    try {
+        const savedStaging = localStorage.getItem('amq_staging_v1');
+        return savedStaging ? JSON.parse(savedStaging) : [];
+    } catch (e) {
+        return [];
+    }
+  });
+
+  // Persist Staging Changes
+  useEffect(() => {
+    localStorage.setItem('amq_staging_v1', JSON.stringify(stagingCatalog));
+  }, [stagingCatalog]);
+
   const saveProducts = () => {
     try {
-        localStorage.setItem('amq_products_v1', JSON.stringify(products));
+        localStorage.setItem('amq_products_v1', JSON.stringify(liveCatalog));
     } catch (e) {
         alert("Erreur lors de la sauvegarde.");
     }
@@ -53,17 +81,66 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
   const resetCatalog = () => {
     if(confirm("Êtes-vous sûr de vouloir réinitialiser le catalogue ?")) {
         localStorage.removeItem('amq_products_v1');
-        // Force reload from constant
-        setProducts((PRODUCT_CATALOG as unknown as Product[]).map(p => ({
+        setLiveCatalog((PRODUCT_CATALOG as unknown as Product[]).map(p => ({
             ...p,
             category: detectSmartCategory(p.name, p.category),
-            isAvailable: true
+            isAvailable: true,
+            source: 'system',
+            stagingStatus: 'live',
+            confidenceScore: 1
         }))); 
     }
   };
 
+  // KMS: Commit Staging to Live
+  const commitStagingToLive = () => {
+      if (stagingCatalog.length === 0) return;
+
+      const newLive = [...liveCatalog];
+      let updatedCount = 0;
+      let newCount = 0;
+
+      stagingCatalog.forEach(stageItem => {
+          const idx = newLive.findIndex(p => p.id === stageItem.id || p.sku === stageItem.sku);
+          const liveItem = { ...stageItem, stagingStatus: 'live' as const, lastUpdated: new Date().toISOString() };
+
+          if (idx >= 0) {
+              // Update existing
+              newLive[idx] = { ...newLive[idx], ...liveItem };
+              updatedCount++;
+          } else {
+              // Add new
+              newLive.push(liveItem);
+              newCount++;
+          }
+      });
+
+      setLiveCatalog(newLive);
+      setStagingCatalog([]); // Clear staging
+      localStorage.setItem('amq_products_v1', JSON.stringify(newLive));
+      alert(`Catalogue mis à jour: ${newCount} ajouts, ${updatedCount} modifications.`);
+  };
+
+  // KMS: Discard Staging
+  const discardStaging = () => {
+      if(confirm("Supprimer tous les produits en attente ?")) {
+          setStagingCatalog([]);
+      }
+  };
+
   return (
-    <ProductContext.Provider value={{ products, setProducts, settings, setSettings, saveProducts, resetCatalog }}>
+    <ProductContext.Provider value={{ 
+        products: liveCatalog, // Backward compatibility
+        setProducts: setLiveCatalog, // Backward compatibility
+        stagingProducts: stagingCatalog,
+        setStagingProducts: setStagingCatalog,
+        commitStagingToLive,
+        discardStaging,
+        settings, 
+        setSettings, 
+        saveProducts, 
+        resetCatalog 
+    }}>
       {children}
     </ProductContext.Provider>
   );

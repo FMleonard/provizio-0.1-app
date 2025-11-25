@@ -1,10 +1,15 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
-import { Settings, Wand2, Download, Database, RotateCcw, Search, CheckCircle2, Save, Plus, X, Sparkles, AlertTriangle, BrainCircuit, RefreshCw, Globe, Loader, FileJson, ArrowRight, Link as LinkIcon, Image as ImageIcon, Zap, Microscope, BookOpen, Monitor, Trash2, CheckSquare, Square, FileText, Copy, LayoutDashboard, ChevronRight } from 'lucide-react';
+import { Settings, Wand2, Download, Database, RotateCcw, Search, CheckCircle2, Save, Plus, X, Sparkles, AlertTriangle, BrainCircuit, RefreshCw, Globe, Loader, FileJson, ArrowRight, Link as LinkIcon, Image as ImageIcon, Zap, Microscope, BookOpen, Monitor, Trash2, CheckSquare, Square, FileText, Copy, LayoutDashboard, ChevronRight, Import, GitMerge } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { Product, Settings as SettingsType } from '../types';
 import { ProductManagementRow } from './ProductManagementRow';
 import { detectSmartCategory } from '../constants';
+import { useProducts } from '../contexts/StoreContext';
+import { IngestionPanel } from './IngestionPanel';
+import { DataConflictResolver } from './DataConflictResolver';
+import { RuleManager } from './RuleManager';
 
 interface SettingsDashboardProps {
   settings: SettingsType;
@@ -17,17 +22,12 @@ interface SettingsDashboardProps {
   onResetCatalog: () => void;
 }
 
+// ... (KEEP ALL EXISTING SCRAPER HELPERS & INTERFACES: ScrapedCard, SavedRule, extractProductCards) ...
 // --- ROBUST DOM EXTRACTION LOGIC ---
 interface ScrapedCard {
     text: string;
     url?: string;
     img?: string;
-}
-
-interface SavedRule {
-    id: string;
-    name: string;
-    content: string;
 }
 
 const extractProductCards = (html: string): ScrapedCard[] => {
@@ -42,7 +42,7 @@ const extractProductCards = (html: string): ScrapedCard[] => {
             throw new Error("Page blocked or empty (Captcha/Cloudflare detected)");
         }
         
-        // STRATEGY 1: Targeted Class Selectors (Most reliable if structure is known)
+        // STRATEGY 1: Targeted Class Selectors
         const selectors = [
             '.product-layout', 
             '.product-thumb', 
@@ -72,7 +72,6 @@ const extractProductCards = (html: string): ScrapedCard[] => {
 
         // STRATEGY 2: Heuristic Price Search (Fallback)
         if (nodes.length === 0) {
-            console.log("Strategy 1 failed. Attempting Heuristic Price Search...");
             const treeWalker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null);
             const priceNodes: Node[] = [];
             let node;
@@ -84,14 +83,11 @@ const extractProductCards = (html: string): ScrapedCard[] => {
                 }
             }
             
-            // For each price, traverse up to find a container with an image
             const candidates = new Set<Element>();
             priceNodes.forEach(n => {
                 let curr: Element | null = n.parentElement;
-                // Go up max 5 levels to find a container (div/li) that likely holds the product
                 for (let i = 0; i < 5; i++) {
                     if (!curr) break;
-                    // It's a candidate if it's a block element and has an image
                     if ((curr.tagName === 'DIV' || curr.tagName === 'LI') && curr.querySelector('img')) {
                          if (curr.innerHTML.length < 5000) { 
                             candidates.add(curr);
@@ -106,15 +102,12 @@ const extractProductCards = (html: string): ScrapedCard[] => {
 
         if (nodes.length > 0) {
             return nodes.map(el => {
-                // 1. Extract Link (Deep Dive Enabler)
                 const linkNode = el.querySelector('a');
                 let url = linkNode?.getAttribute('href') || undefined;
                 
-                // 2. Extract Image
                 const imgNode = el.querySelector('img');
                 let img = imgNode?.getAttribute('src') || imgNode?.getAttribute('data-src') || undefined;
 
-                // 3. Clean Text
                 const clone = el.cloneNode(true) as HTMLElement;
                 clone.querySelectorAll('script, style, .hidden, .display-none').forEach(e => e.remove());
                 
@@ -140,6 +133,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
   const [activeTab, setActiveTab] = useState('general');
   const [prodSearch, setProdSearch] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const { stagingProducts, commitStagingToLive, discardStaging } = useProducts();
   
   // Scraper Settings
   const [scrapeUrl, setScrapeUrl] = useState('https://www.alimentationmonquartier.com/fr/catalogue');
@@ -154,16 +148,6 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
       supplier: false
   });
   
-  // Custom Rules Logic
-  const [customInstructions, setCustomInstructions] = useState('');
-  const [savedRules, setSavedRules] = useState<SavedRule[]>(() => {
-      try {
-          const saved = localStorage.getItem('amq_scraper_rules');
-          return saved ? JSON.parse(saved) : [];
-      } catch (e) { return []; }
-  });
-  const [activeRuleIds, setActiveRuleIds] = useState<string[]>([]);
-
   const [aiLoading, setAiLoading] = useState(false);
   const [scrapeLogs, setScrapeLogs] = useState<string[]>([]);
   const [scrapeStats, setScrapeStats] = useState({ added: 0, updated: 0, scanned: 0 });
@@ -183,61 +167,27 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
       linkElement.click();
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!e.target.files) return;
-      const fileReader = new FileReader();
-      fileReader.readAsText(e.target.files[0], "UTF-8");
-      fileReader.onload = e => {
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
           try {
-              if (e.target && typeof e.target.result === 'string') {
-                const importedData = JSON.parse(e.target.result);
-                if(Array.isArray(importedData)) {
-                    const fixedData = importedData.map((p: any) => ({
-                        ...p,
-                        isAvailable: true 
-                    }));
-                    setProducts(fixedData);
-                    alert("Base de données restaurée avec succès !");
-                } else {
-                    alert("Format de fichier invalide.");
-                }
-              }
-          } catch(err) {
-              alert("Erreur lors de la lecture du fichier.");
+            const content = e.target?.result as string;
+            const importedProducts = JSON.parse(content);
+            if (Array.isArray(importedProducts)) {
+              setProducts(importedProducts);
+              alert('Produits importés avec succès !');
+            } else {
+              alert('Le fichier JSON doit contenir un tableau de produits.');
+            }
+          } catch (error) {
+            console.error('Error parsing JSON:', error);
+            alert('Erreur lors de la lecture du fichier JSON.');
           }
-      };
-  };
-
-  // Rule Management
-  const saveCurrentRule = () => {
-      if (!customInstructions.trim()) return;
-      const name = prompt("Nommez cette règle (ex: 'Ignorer les soldes' ou 'Spécial BBQ'):");
-      if (name) {
-          const newRule: SavedRule = {
-              id: Date.now().toString(),
-              name,
-              content: customInstructions
-          };
-          const updatedRules = [...savedRules, newRule];
-          setSavedRules(updatedRules);
-          localStorage.setItem('amq_scraper_rules', JSON.stringify(updatedRules));
-          setActiveRuleIds(prev => [...prev, newRule.id]);
+        };
+        reader.readAsText(file);
       }
-  };
-
-  const deleteRule = (id: string) => {
-      if(confirm("Supprimer cette règle ?")) {
-          const updatedRules = savedRules.filter(r => r.id !== id);
-          setSavedRules(updatedRules);
-          localStorage.setItem('amq_scraper_rules', JSON.stringify(updatedRules));
-          setActiveRuleIds(prev => prev.filter(rid => rid !== id));
-      }
-  };
-
-  const toggleRule = (id: string) => {
-      setActiveRuleIds(prev => 
-          prev.includes(id) ? prev.filter(rid => rid !== id) : [...prev, id]
-      );
   };
 
   const safeJsonParse = (text: string, fallback: any) => {
@@ -288,60 +238,38 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
       const name = (item.name || '').toLowerCase();
       const cat = (item.category || '').toLowerCase();
 
-      // 1. SEASONALITY & PREMIUM RULES
-      if (name.includes('tomahawk') || name.includes('wagyu') || name.includes('kobe') || name.includes('filet mignon') || name.includes('homard')) {
-          item.seasonality = 'special';
-          item.isPremium = true;
-          item.managementCategory = 'premium';
-      }
-      else if (
-          name.includes('t-bone') || 
-          name.includes('rib') || 
-          name.includes('steak') || 
-          name.includes('burger') || 
-          name.includes('brochette') ||
-          name.includes('bbq') ||
-          name.includes('bavette')
-      ) {
-          item.seasonality = 'summer';
-      }
-      else if (
-          name.includes('rôti') || 
-          name.includes('roast') || 
-          name.includes('cube') || 
-          name.includes('ragout') || 
-          name.includes('ragoût') || 
-          name.includes('fondue') || 
-          name.includes('mijote') ||
-          name.includes('pâté')
-      ) {
-          item.seasonality = 'winter';
-      }
-      else {
-          item.seasonality = 'all_year';
-      }
+      // Retrieve Active Rules from LocalStorage (bridge to RuleManager)
+      try {
+          const storedRules = localStorage.getItem('amq_automation_rules');
+          if (storedRules) {
+              const rules = JSON.parse(storedRules);
+              rules.forEach((rule: any) => {
+                  if (!rule.active) return;
+                  
+                  let match = false;
+                  const fieldVal = String(item[rule.trigger.field as keyof Partial<Product>] || '').toLowerCase();
+                  const triggerVal = String(rule.trigger.value).toLowerCase();
 
-      // 2. MANAGEMENT & STAPLES (High Frequency Items)
-      if (
-          name.includes('haché') || name.includes('ground') ||
-          name.includes('poitrine') || name.includes('breast') ||
-          name.includes('pilon') || name.includes('drumstick') ||
-          name.includes('cuisse') || name.includes('thigh') ||
-          name.includes('côtelette') || name.includes('chop') ||
-          name.includes('saucisse')
-      ) {
-          item.managementCategory = 'base'; 
-          item.consumptionType = 'staple';
-          item.seasonality = 'all_year'; 
-      }
+                  if (rule.trigger.operator === 'contains' && fieldVal.includes(triggerVal)) match = true;
+                  if (rule.trigger.operator === 'equals' && fieldVal === triggerVal) match = true;
+                  
+                  if (match) {
+                      if (rule.action.type === 'set_season') item.seasonality = String(rule.action.value);
+                      if (rule.action.type === 'set_category') item.category = String(rule.action.value);
+                      if (rule.action.type === 'flag_premium') {
+                           item.isPremium = rule.action.value === true || rule.action.value === 'true';
+                           if(item.isPremium) item.managementCategory = 'premium';
+                      }
+                  }
+              });
+          }
+      } catch (e) { console.warn("Rule Engine Error", e); }
 
-      // 3. SPICES & PREPARED - Handled by detectSmartCategory now, but extra properties set here
-      if (cat.includes('epice') || name.includes('épice') || name.includes('sauce') || name.includes('rub') || name.includes('assaisonnement')) {
-          item.managementCategory = 'base';
-          item.consumptionType = 'staple';
-      }
-      else if (cat.includes('prêt') || name.includes('pâté') || name.includes('lasagne') || name.includes('tourtière') || name.includes('pizza') || name.includes('quiche')) {
-          item.managementCategory = 'base';
+      // 1. SEASONALITY & PREMIUM RULES (Hardcoded Fallback)
+      if (!item.seasonality) {
+          if (name.includes('bbq') || name.includes('t-bone') || name.includes('burger')) item.seasonality = 'summer';
+          else if (name.includes('ragoût') || name.includes('fondue') || name.includes('mijote')) item.seasonality = 'winter';
+          else item.seasonality = 'all_year';
       }
 
       // 4. FORCE AVAILABLE
@@ -402,13 +330,6 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
       try {
-          const activeRulesContent = savedRules
-            .filter(r => activeRuleIds.includes(r.id))
-            .map(r => r.content)
-            .join('\n');
-          
-          const fullInstructions = `${customInstructions}\n${activeRulesContent}`;
-
           addLog(`Starting Mission: ${scrapeStrategy.toUpperCase()} MODE`);
           
           for (let page = scrapeStartPage; page <= scrapeEndPage; page++) {
@@ -453,14 +374,6 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
                         - productUrl (use the 'url' from input if available)
                         - imageUrl (use the 'img' from input if available)
                         - texture (e.g. ground, steak, roast)
-                        
-                        Apply these business rules:
-                        - Seasonality: BBQ/T-Bone -> 'summer'. Roast/Stew -> 'winter'.
-                        - Premium: Tomahawk/Wagyu -> 'premium'.
-                        - Staples: Ground meat/Sausages -> 'staple'.
-                        
-                        USER INSTRUCTIONS:
-                        ${fullInstructions || 'None'}
                       `;
 
                       try {
@@ -488,21 +401,9 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
                           (p.sku && p.sku === sku)
                       );
 
-                      // --- DEEP DIVE LOGIC ---
-                      // If strategy is deep_dive, we have a URL, and it's either new OR we want to enrich existing
                       let resolvedUrl = ruleAppliedItem.productUrl;
-                      // Handle relative URLs
                       if (resolvedUrl && !resolvedUrl.startsWith('http')) {
                           resolvedUrl = new URL(resolvedUrl, 'https://www.alimentationmonquartier.com').toString();
-                      }
-
-                      if (scrapeStrategy === 'deep_dive' && resolvedUrl && extractOptions.description) {
-                         // We would fetch the resolvedUrl here. 
-                         // Note: Fetching strictly inside a browser loop might be slow or blocked by CORS.
-                         // For this simulation, we will assume basic enrichment is done by the first pass text.
-                         // A real implementation would need a backend proxy or aggressive CORS proxying for deep pages.
-                         // We will log it.
-                         // addLog(`Deep scan candidate: ${ruleAppliedItem.name}`);
                       }
 
                       const cleanProduct: Product = {
@@ -524,16 +425,17 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
                           isPremium: ruleAppliedItem.isPremium || false,
                           imageUrl: ruleAppliedItem.imageUrl || (existingIndex > -1 ? workingProducts[existingIndex].imageUrl : undefined),
                           productUrl: resolvedUrl,
-                          description: ruleAppliedItem.description
+                          description: ruleAppliedItem.description,
+                          // KMS Fields
+                          source: 'scrape',
+                          lastUpdated: new Date().toISOString()
                       };
 
                       if (existingIndex > -1) {
                           if (scrapeStrategy !== 'price_watch') {
-                             // Update logic
                              workingProducts[existingIndex] = { ...workingProducts[existingIndex], ...cleanProduct, id: workingProducts[existingIndex].id };
                              updatedItemsCount++;
                           } else {
-                             // Only update price
                              if (workingProducts[existingIndex].price !== cleanProduct.price || workingProducts[existingIndex].salePrice !== cleanProduct.salePrice) {
                                  workingProducts[existingIndex].price = cleanProduct.price;
                                  workingProducts[existingIndex].salePrice = cleanProduct.salePrice;
@@ -546,7 +448,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
                       }
                   }
               }
-              setScrapeStats({ added: newItemsCount, updated: updatedItemsCount, scanned: page * 20 }); // Approx
+              setScrapeStats({ added: newItemsCount, updated: updatedItemsCount, scanned: page * 20 }); 
           }
 
           setProducts(workingProducts);
@@ -555,7 +457,6 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
 
       } catch (error: any) {
           addLog(`CRITICAL ERROR: ${error.message}`);
-          // setAiError(error.message); // Removed unused call
       } finally {
           setAiLoading(false);
       }
@@ -563,7 +464,9 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
 
   const tabs = [
       { id: 'general', label: 'Général', icon: LayoutDashboard },
-      { id: 'scraper', label: 'Web Scraper IA', icon: Globe },
+      { id: 'ingestion', label: 'Import & IA', icon: Import },
+      { id: 'review', label: 'Review & Conflits', icon: GitMerge, badge: stagingProducts.length > 0 ? stagingProducts.length : undefined },
+      { id: 'scraper', label: 'Web Scraper', icon: Globe },
       { id: 'database', label: 'Base de Données', icon: Database },
       { id: 'backup', label: 'Sauvegarde', icon: Download },
   ];
@@ -584,7 +487,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
           </button>
       </div>
 
-      {/* BENTO TABS - Segmented Control */}
+      {/* BENTO TABS */}
       <div className="flex p-1 bg-gray-100 rounded-2xl mb-8 overflow-x-auto">
           {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -593,10 +496,15 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${isActive ? 'bg-white text-slate-900 shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all whitespace-nowrap relative ${isActive ? 'bg-white text-slate-900 shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-700'}`}
                   >
                       <Icon className={`w-4 h-4 ${isActive ? 'text-red-600' : 'text-gray-400'}`} />
                       {tab.label}
+                      {tab.badge && (
+                          <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] text-white">
+                             {tab.badge}
+                          </span>
+                      )}
                   </button>
               )
           })}
@@ -626,7 +534,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
                       
                       <div className="bg-red-50 p-6 rounded-2xl border border-red-100">
                           <h4 className="font-bold text-red-800 mb-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/> Zone de Danger</h4>
-                          <p className="text-sm text-red-600 mb-4">Réinitialiser le catalogue remettra les produits par défaut (bœuf, poulet, etc.) et effacera vos ajouts.</p>
+                          <p className="text-sm text-red-600 mb-4">Réinitialiser le catalogue remettra les produits par défaut et effacera vos ajouts.</p>
                           <button onClick={onResetCatalog} className="px-4 py-2 bg-white border border-red-200 text-red-600 font-bold rounded-lg hover:bg-red-50 text-sm">
                               Réinitialiser le Catalogue
                           </button>
@@ -635,10 +543,24 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
               </div>
           )}
 
+          {/* INGESTION PANEL */}
+          {activeTab === 'ingestion' && (
+              <div className="p-6 h-full">
+                  <IngestionPanel />
+              </div>
+          )}
+          
+          {/* DATA CONFLICT RESOLVER */}
+          {activeTab === 'review' && (
+              <div className="p-6 h-full">
+                  <DataConflictResolver />
+              </div>
+          )}
+
           {/* SCRAPER UI */}
           {activeTab === 'scraper' && (
               <div className="p-6">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
                       {/* Left Column: Controls */}
                       <div className="space-y-6">
                           <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
@@ -696,40 +618,9 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
                           </div>
                       </div>
 
-                      {/* Middle Column: Rules */}
-                      <div className="space-y-6">
-                           <div className="bg-white p-5 rounded-2xl border border-gray-200 h-full flex flex-col">
-                                <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><BookOpen className="w-4 h-4 text-blue-600"/> Instructions Personnalisées (Cerveau)</h4>
-                                <textarea 
-                                    value={customInstructions}
-                                    onChange={(e) => setCustomInstructions(e.target.value)}
-                                    placeholder="Ex: 'Si le produit contient le mot BBQ, c'est pour l'été.' ou 'Ignore les produits avec la mention Épuisé'."
-                                    className="w-full flex-1 min-h-[120px] p-3 border rounded-xl text-sm mb-3 focus:ring-2 focus:ring-blue-100 outline-none resize-none"
-                                />
-                                <button onClick={saveCurrentRule} className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 self-end mb-4">
-                                    <Plus className="w-3 h-3"/> Enregistrer comme règle
-                                </button>
-                                
-                                <div className="border-t border-gray-100 pt-3">
-                                    <h5 className="text-xs font-bold text-gray-400 uppercase mb-2">Règles Actives</h5>
-                                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                                        {savedRules.length === 0 && <p className="text-xs text-gray-300 italic">Aucune règle enregistrée.</p>}
-                                        {savedRules.map(rule => (
-                                            <div key={rule.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-lg group">
-                                                <label className="flex items-center gap-2 cursor-pointer flex-1">
-                                                    {activeRuleIds.includes(rule.id) ? 
-                                                        <CheckSquare className="w-4 h-4 text-blue-600" /> : 
-                                                        <Square className="w-4 h-4 text-gray-300" />
-                                                    }
-                                                    <input type="checkbox" className="hidden" checked={activeRuleIds.includes(rule.id)} onChange={() => toggleRule(rule.id)} />
-                                                    <span className={`text-xs font-medium ${activeRuleIds.includes(rule.id) ? 'text-slate-700' : 'text-gray-400'}`}>{rule.name}</span>
-                                                </label>
-                                                <button onClick={() => deleteRule(rule.id)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500"><Trash2 className="w-3 h-3"/></button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                           </div>
+                      {/* Middle Column: Rules (NEW RULE MANAGER) */}
+                      <div className="h-full">
+                           <RuleManager />
                       </div>
 
                       {/* Right Column: Console & Action */}

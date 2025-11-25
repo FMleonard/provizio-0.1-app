@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { CartItem, ClientInfo, Settings } from '../types';
 import { Printer, TrendingUp, DollarSign, FileSignature, CheckCircle2, Box, Snowflake } from 'lucide-react';
@@ -24,10 +23,10 @@ export const SummarySection: React.FC<SummarySectionProps> = ({ cart, grandTotal
   // Freezer Space Calculation
   // PDF: 1 cu ft = 25 lbs
   // 1 lb = 0.453592 kg
-  const totalWeightKg = useMemo(() => {
+  const totalWeightKg = useMemo((): number => {
       return cart.reduce((total, item) => {
           const itemWeight = (item.product.totalWeightGrams || 0) / 1000;
-          const totalQty = Object.values(item.quantities).reduce((a: number, b: number) => a + b, 0);
+          const totalQty = (Object.values(item.quantities) as number[]).reduce((a: number, b: number) => a + b, 0);
           return total + (itemWeight * totalQty);
       }, 0);
   }, [cart]);

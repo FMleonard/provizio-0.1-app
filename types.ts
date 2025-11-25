@@ -1,4 +1,5 @@
 
+
 export interface Product {
   id: string;
   sku: string;
@@ -19,10 +20,26 @@ export interface Product {
   isAppetizer?: boolean;
   isBreakfast?: boolean;
   supplier?: string;
-  // New fields for deep scraping
   description?: string;
   imageUrl?: string;
   productUrl?: string;
+
+  // --- KNOWLEDGE MANAGEMENT FIELDS ---
+  source?: 'manual' | 'scrape' | 'upload' | 'system';
+  lastUpdated?: string; // ISO Date String
+  confidenceScore?: number; // 0.0 to 1.0
+  stagingStatus?: 'live' | 'draft' | 'conflict' | 'archived';
+  originalSourceFileId?: string; // Reference to KnowledgeSource.id
+}
+
+export interface KnowledgeSource {
+  id: string;
+  filename: string;
+  uploadDate: string;
+  fileType: 'pdf' | 'excel' | 'csv' | 'json';
+  status: 'processing' | 'completed' | 'error';
+  processedContent?: any; 
+  itemCount?: number;
 }
 
 export interface CartItem {
@@ -88,4 +105,25 @@ export interface FreezerSpec {
     cubicFeet: number;
     capacityLbs: number; // 1 cu ft = 25 lbs (approx)
     description: string;
+}
+
+// --- MODULE 3: AUTOMATION RULES ---
+export type RuleTriggerField = 'name' | 'category' | 'price' | 'sku';
+export type RuleOperator = 'contains' | 'equals' | 'starts_with' | 'greater_than' | 'less_than';
+export type RuleActionType = 'set_season' | 'set_category' | 'flag_premium' | 'set_consumption' | 'exclude';
+
+export interface AutomationRule {
+    id: string;
+    name: string;
+    active: boolean;
+    trigger: {
+        field: RuleTriggerField;
+        operator: RuleOperator;
+        value: string | number;
+    };
+    action: {
+        type: RuleActionType;
+        value: string | number | boolean;
+    };
+    lastApplied?: string;
 }
