@@ -1,13 +1,14 @@
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingCart, Search, Menu, Calculator, ChevronUp, ChevronDown, Wand2, Calendar as CalendarIcon, UserCheck, Users, Utensils, Info, FileText, LayoutGrid, Home, Settings as SettingsIcon, Minus, Plus, Trash2, ArrowDown, Tag, X } from 'lucide-react';
+import { ShoppingCart, Search, Menu, Calculator, ChevronUp, ChevronDown, Wand2, Calendar as CalendarIcon, UserCheck, Users, Utensils, Info, FileText, LayoutGrid, Home, Settings as SettingsIcon, Minus, Plus, Trash2, ArrowDown, Tag, X, Sparkles } from 'lucide-react';
 import { CATEGORIES } from './constants';
 import { Product } from './types';
 import { SettingsDashboard } from './components/SettingsDashboard';
 import { ClientSection } from './components/ClientSection';
 import { InfoSection } from './components/InfoSection';
 import { EvaluationSection } from './components/EvaluationSection';
-import { MagicienSection } from './components/MagicienSection';
+// import { MagicienSection } from './components/MagicienSection'; // Deprecated Module 2
+import { KnowledgeChat } from './components/KnowledgeChat'; // New Module 4
 import { CalendarSection } from './components/CalendarSection';
 import { TastingSection } from './components/TastingSection';
 import { SummarySection } from './components/SummarySection';
@@ -151,7 +152,7 @@ function AppContent() {
                  </button>
              </div>
 
-             <BentoButton view="magicien" icon={Wand2} label="Magicien IA" colorClass="bg-gradient-to-br from-purple-50 to-white text-purple-700 border-purple-100 hover:border-purple-300" activeClass="bg-purple-600 text-white ring-2 ring-purple-600 ring-offset-2" />
+             <BentoButton view="magicien" icon={Sparkles} label="Assistant IA" colorClass="bg-gradient-to-br from-purple-50 to-white text-purple-700 border-purple-100 hover:border-purple-300" activeClass="bg-purple-600 text-white ring-2 ring-purple-600 ring-offset-2" />
              <BentoButton view="calendar" icon={CalendarIcon} label="Planificateur" />
              <BentoButton view="client" icon={UserCheck} label="Client" />
              <BentoButton view="evaluation" icon={Users} label="Évaluation" />
@@ -243,7 +244,7 @@ function AppContent() {
                 </button>
                 <button onClick={() => setCurrentView('magicien')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentView === 'magicien' ? 'text-purple-600 bg-purple-50' : 'text-gray-400'}`}>
                     <Wand2 className="w-6 h-6" />
-                    <span className="text-[10px] font-bold mt-1">Magicien</span>
+                    <span className="text-[10px] font-bold mt-1">Assistant</span>
                 </button>
                 <button onClick={() => setCurrentView('calendar')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentView === 'calendar' ? 'text-slate-800 bg-gray-100' : 'text-gray-400'}`}>
                     <CalendarIcon className="w-6 h-6" />
@@ -267,7 +268,7 @@ function AppContent() {
           {currentView === 'client' && <ClientSection clientInfo={clientInfo} setClientInfo={setClientInfo} />}
           {currentView === 'info' && <InfoSection />}
           {currentView === 'evaluation' && <EvaluationSection formData={evaluationData} setFormData={setEvaluationData} products={products} />}
-          {currentView === 'magicien' && <MagicienSection evaluationData={evaluationData} onApply={(newCart) => { setCart(newCart); setCurrentView('calendar'); }} minDeliveryAmount={settings.minDeliveryAmount} addToPickupList={addToPickupList} products={products} settings={settings} />}
+          {currentView === 'magicien' && <KnowledgeChat />}
           {currentView === 'calendar' && <CalendarSection cart={cart} evaluationData={evaluationData} />}
           {currentView === 'tasting' && <TastingSection />}
           {currentView === 'summary' && <SummarySection cart={cart} grandTotal={grandTotal} clientInfo={clientInfo} pickupList={pickupList} settings={settings} />}
