@@ -1,23 +1,22 @@
 
 import React, { useState, useMemo } from 'react';
-import { ShoppingCart, Search, Menu, Calculator, ChevronUp, ChevronDown, Wand2, Calendar as CalendarIcon, UserCheck, Users, Utensils, Info, FileText, LayoutGrid, Home, Settings as SettingsIcon, Minus, Plus, Trash2, ArrowDown, Tag, X, Sparkles } from 'lucide-react';
+import { ShoppingCart, Search, Menu, Calculator, ChevronUp, ChevronDown, Wand2, Calendar as CalendarIcon, UserCheck, Users, Utensils, Info, FileText, LayoutGrid, Home, Settings as SettingsIcon, Minus, Plus, Trash2, ArrowDown, Tag, X, Store } from 'lucide-react';
 import { CATEGORIES } from './constants';
 import { Product } from './types';
 import { SettingsDashboard } from './components/SettingsDashboard';
 import { ClientSection } from './components/ClientSection';
 import { InfoSection } from './components/InfoSection';
 import { EvaluationSection } from './components/EvaluationSection';
-// import { MagicienSection } from './components/MagicienSection'; // Deprecated Module 2
-import { KnowledgeChat } from './components/KnowledgeChat'; // New Module 4
+import { KnowledgeChat } from './components/KnowledgeChat';
 import { CalendarSection } from './components/CalendarSection';
 import { TastingSection } from './components/TastingSection';
 import { SummarySection } from './components/SummarySection';
+import { SuccursalesSection } from './components/SuccursalesSection';
 
 // Import Contexts
 import { ProductProvider, ClientProvider, CartProvider, useProducts, useCart, useClient } from './contexts/StoreContext';
 
 // --- MAIN CONTENT COMPONENT ---
-// This component now only handles VIEW LOGIC, not business logic
 function AppContent() {
   const [currentView, setCurrentView] = useState('shop');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -28,9 +27,9 @@ function AppContent() {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
 
   // Consume Contexts
-  const { products, setProducts, settings, setSettings, saveProducts, resetCatalog } = useProducts();
+  const { products, setSettings, saveProducts, resetCatalog } = useProducts();
   const { cart, setCart, updateQuantity, removeFromCart, grandTotal, cartCount } = useCart();
-  const { clientInfo, setClientInfo, evaluationData, setEvaluationData, pickupList, addToPickupList } = useClient();
+  const { clientInfo, setClientInfo, evaluationData, setEvaluationData, pickupList } = useClient();
 
   // Derived UI State
   const filteredProducts = useMemo(() => 
@@ -152,12 +151,15 @@ function AppContent() {
                  </button>
              </div>
 
-             <BentoButton view="magicien" icon={Sparkles} label="Assistant IA" colorClass="bg-gradient-to-br from-purple-50 to-white text-purple-700 border-purple-100 hover:border-purple-300" activeClass="bg-purple-600 text-white ring-2 ring-purple-600 ring-offset-2" />
+             <BentoButton view="chat" icon={Wand2} label="Assistant IA" colorClass="bg-gradient-to-br from-purple-50 to-white text-purple-700 border-purple-100 hover:border-purple-300" activeClass="bg-purple-600 text-white ring-2 ring-purple-600 ring-offset-2" />
              <BentoButton view="calendar" icon={CalendarIcon} label="Planificateur" />
              <BentoButton view="client" icon={UserCheck} label="Client" />
              <BentoButton view="evaluation" icon={Users} label="Évaluation" />
              <BentoButton view="tasting" icon={Utensils} label="Dégustation" />
-             <BentoButton view="info" icon={Info} label="Infos" />
+             <BentoButton view="succursales" icon={Store} label="Succursales" />
+             <div className="col-span-2">
+                <BentoButton view="info" icon={Info} label="Infos" />
+             </div>
 
              <div className="col-span-2 mt-2">
                  <button 
@@ -242,7 +244,7 @@ function AppContent() {
                     <Home className="w-6 h-6" />
                     <span className="text-[10px] font-bold mt-1">Boutique</span>
                 </button>
-                <button onClick={() => setCurrentView('magicien')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentView === 'magicien' ? 'text-purple-600 bg-purple-50' : 'text-gray-400'}`}>
+                <button onClick={() => setCurrentView('chat')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentView === 'chat' ? 'text-purple-600 bg-purple-50' : 'text-gray-400'}`}>
                     <Wand2 className="w-6 h-6" />
                     <span className="text-[10px] font-bold mt-1">Assistant</span>
                 </button>
@@ -264,14 +266,28 @@ function AppContent() {
 
         {/* MAIN CONTENT AREA */}
         <main className="flex-1 min-h-[calc(100vh-6rem)]">
-          {currentView === 'settings' && <SettingsDashboard settings={settings} setSettings={setSettings} products={products} setProducts={setProducts} onReset={() => setCart([])} exportData={() => {}} onSave={saveProducts} onResetCatalog={resetCatalog} />}
+          {currentView === 'settings' && (
+             <div className="h-full">
+                 <SettingsDashboard 
+                    settings={useProducts().settings} 
+                    setSettings={setSettings} 
+                    products={products} 
+                    setProducts={useProducts().setProducts} 
+                    onReset={() => setCart([])} 
+                    exportData={() => {}} 
+                    onSave={saveProducts} 
+                    onResetCatalog={resetCatalog} 
+                 />
+             </div>
+          )}
           {currentView === 'client' && <ClientSection clientInfo={clientInfo} setClientInfo={setClientInfo} />}
           {currentView === 'info' && <InfoSection />}
           {currentView === 'evaluation' && <EvaluationSection formData={evaluationData} setFormData={setEvaluationData} products={products} />}
-          {currentView === 'magicien' && <KnowledgeChat />}
+          {currentView === 'chat' && <KnowledgeChat />}
           {currentView === 'calendar' && <CalendarSection cart={cart} evaluationData={evaluationData} />}
           {currentView === 'tasting' && <TastingSection />}
-          {currentView === 'summary' && <SummarySection cart={cart} grandTotal={grandTotal} clientInfo={clientInfo} pickupList={pickupList} settings={settings} />}
+          {currentView === 'succursales' && <SuccursalesSection />}
+          {currentView === 'summary' && <SummarySection cart={cart} grandTotal={grandTotal} clientInfo={clientInfo} pickupList={pickupList} settings={useProducts().settings} />}
           {currentView === 'shop' && (
             <>
               {/* Mobile Category Horizontal Scroll */}

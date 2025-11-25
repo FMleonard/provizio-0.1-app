@@ -1,5 +1,6 @@
 
-import { Percent, Beef, Drumstick, ChefHat, Fish, ScrollText, DollarSign, Utensils, Flame, PiggyBank, Dumbbell, Zap } from 'lucide-react';
+
+import { Percent, Beef, Drumstick, ChefHat, Fish, ScrollText, DollarSign, Utensils, Flame, PiggyBank, Dumbbell, Zap, Box, UserPlus } from 'lucide-react';
 import { HalalIcon } from './components/HalalIcon';
 
 // --- AMQ KNOWLEDGE BASE (From PDF Report 2025) ---
@@ -123,111 +124,121 @@ export const detectSmartCategory = (name: string, currentCategory: string = ''):
     return currentCategory || 'Autre';
 };
 
-// --- PERSONA TEMPLATES ---
+// --- PERSONA TEMPLATES (Package Scenarios) ---
 // These define the "Default State" for specific user archetypes
 export const PERSONA_TEMPLATES = [
     {
-        id: 'bbq_king',
-        label: 'Roi du BBQ',
-        description: 'Amateur de grillades, steaks et côtes levées.',
-        iconName: 'Flame',
-        color: 'orange',
-        rules: {
-            'Boeuf': [
-                { keywords: ['t-bone', 'tomahawk', 'ribeye', 'faux-filet', 'bifteck'], freq: 1 },
-                { keywords: ['bavette', 'contre-filet'], freq: 0.5 },
-                { keywords: ['burger', 'haché'], freq: 1 },
-                { keywords: ['saucisse'], freq: 0.5 }, // Often beef sausages exist
-            ],
-            'Porc': [
-                { keywords: ['côte levée', 'ribs', 'back ribs'], freq: 1 },
-                { keywords: ['saucisse', 'bacon'], freq: 1 },
-                { keywords: ['côtelette', 'chop'], freq: 0.5 },
-            ],
-            'Poulet': [
-                { keywords: ['aile', 'wings'], freq: 1 },
-                { keywords: ['pilon', 'drumstick'], freq: 0.5 },
-                { keywords: ['poitrine'], freq: 0.5 },
-            ]
-        }
-    },
-    {
         id: 'family_budget',
-        label: 'Famille Écono',
-        description: 'Volume, mijotés et repas rentables.',
+        label: 'Famille Budget (4p)',
+        description: 'Optimisé pour ~100$/sem. Gros formats, mijotés.',
         iconName: 'PiggyBank',
         color: 'green',
         rules: {
             'Boeuf': [
                 { keywords: ['haché', 'ground'], freq: 2 },
-                { keywords: ['cube', 'ragoût', 'stew'], freq: 0.5 },
+                { keywords: ['cube', 'ragoût', 'stew'], freq: 1 },
                 { keywords: ['palette', 'rôti'], freq: 0.5 },
             ],
             'Poulet': [
                 { keywords: ['entier', 'whole'], freq: 1 },
-                { keywords: ['cuisse', 'thigh'], freq: 1 },
-                { keywords: ['pilon'], freq: 1 },
+                { keywords: ['haut de cuisse', 'thigh'], freq: 2 },
+                { keywords: ['pilon', 'drumstick'], freq: 1 },
             ],
             'Porc': [
                 { keywords: ['longe', 'rôti'], freq: 0.5 },
-                { keywords: ['haché'], freq: 1 },
-                { keywords: ['saucisse'], freq: 0.5 },
+                { keywords: ['saucisse'], freq: 1 },
             ],
             'Extra': [
                 { keywords: ['pâté'], freq: 1 },
-                { keywords: ['lasagne'], freq: 0.5 },
             ]
         }
     },
     {
-        id: 'fitness',
-        label: 'Santé & Fitness',
-        description: 'Protéines maigres, peu de gras.',
-        iconName: 'Dumbbell',
+        id: 'shared_custody',
+        label: 'Garde Partagée',
+        description: 'Flexible. Plats enfants et repas rapides.',
+        iconName: 'UserPlus',
+        color: 'orange',
+        rules: {
+            'Boeuf': [
+                { keywords: ['burger', 'haché'], freq: 2 },
+                { keywords: ['minute', 'tournedos'], freq: 1 },
+            ],
+            'Poulet': [
+                { keywords: ['croquette', 'nugget'], freq: 2 },
+                { keywords: ['brochette', 'souvlaki'], freq: 1 },
+                { keywords: ['pané'], freq: 1 },
+            ],
+            'Extra': [
+                { keywords: ['pâté'], freq: 1 },
+                { keywords: ['sauce'], freq: 1 },
+                { keywords: ['lasagne'], freq: 1 },
+            ]
+        }
+    },
+    {
+        id: 'essentials',
+        label: 'Les 5 Essentiels',
+        description: '5 repas simples par semaine. Poulet, Bœuf, Porc.',
+        iconName: 'Zap',
         color: 'blue',
         rules: {
             'Boeuf': [
-                { keywords: ['extra maigre'], freq: 2 },
-                { keywords: ['bavette', 'filet mignon'], freq: 0.5 },
+                { keywords: ['haché', 'ground'], freq: 2 },
             ],
             'Poulet': [
-                { keywords: ['poitrine', 'breast'], freq: 4 },
-                { keywords: ['haché', 'ground'], freq: 1 },
+                { keywords: ['poitrine', 'breast'], freq: 2 },
             ],
-            'Poisson': [
-                { keywords: ['morue', 'cod', 'tilapia'], freq: 1 },
-                { keywords: ['saumon'], freq: 1 },
-                { keywords: ['crevette'], freq: 0.5 },
-            ],
-             'Porc': [
-                { keywords: ['filet', 'tenderloin'], freq: 0.5 },
+            'Porc': [
+                { keywords: ['côtelette', 'chop'], freq: 1 },
             ]
         }
     },
     {
-        id: 'quick_easy',
-        label: 'Vite & Bon',
-        description: 'Prêt-à-manger et cuisson rapide.',
-        iconName: 'Zap',
+        id: 'premium',
+        label: 'Gastronome VIP',
+        description: 'Upgrade. Steaks, Fruits de mer, Veau, Canard.',
+        iconName: 'Flame',
+        color: 'purple',
+        rules: {
+            'Boeuf': [
+                { keywords: ['filet mignon'], freq: 1 },
+                { keywords: ['ribeye', 'faux-filet'], freq: 1 },
+                { keywords: ['bavette'], freq: 0.5 },
+            ],
+            'Poisson': [
+                { keywords: ['pétoncle'], freq: 1 },
+                { keywords: ['homard', 'crevette'], freq: 0.5 },
+                { keywords: ['saumon'], freq: 1 },
+            ],
+             'Gibier & Autres': [
+                { keywords: ['veau'], freq: 0.5 },
+                { keywords: ['canard'], freq: 0.5 }
+            ]
+        }
+    },
+    {
+        id: 'condo_storage',
+        label: 'Espace Condo',
+        description: 'Compact. Emballages plats sous-vide.',
+        iconName: 'Box',
         color: 'yellow',
         rules: {
             'Boeuf': [
-                { keywords: ['minute', 'tournedos'], freq: 1 },
-                { keywords: ['burger'], freq: 1 },
+                { keywords: ['bavette'], freq: 1 },
+                { keywords: ['tournedos'], freq: 1 },
+                { keywords: ['steak'], freq: 1 },
             ],
             'Poulet': [
-                { keywords: ['brochette', 'souvlaki'], freq: 1 },
-                { keywords: ['croquette', 'nugget'], freq: 1 },
-                { keywords: ['pané', 'burger'], freq: 1 },
+                { keywords: ['poitrine', 'breast'], freq: 2 },
+                { keywords: ['tournedos'], freq: 1 },
+            ],
+            'Poisson': [
+                { keywords: ['filet'], freq: 2 },
             ],
             'Porc': [
                 { keywords: ['saucisse'], freq: 1 },
                 { keywords: ['bacon'], freq: 0.5 },
-            ],
-            'Extra': [
-                { keywords: ['lasagne'], freq: 0.5 },
-                { keywords: ['pâté'], freq: 1 },
-                { keywords: ['sauce'], freq: 1 },
             ]
         }
     }

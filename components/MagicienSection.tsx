@@ -1,8 +1,9 @@
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { BrainCircuit, Sparkles, Wand2, RefreshCw, Target } from 'lucide-react';
 import { EvaluationData, Product, CartItem, Settings } from '../types';
-import { AMQ_KNOWLEDGE_BASE } from '../constants';
+import { AMQ_KNOWLEDGE_BASE, PERSONA_TEMPLATES } from '../constants';
 
 interface MagicienSectionProps {
   evaluationData: EvaluationData;
@@ -66,6 +67,8 @@ export const MagicienSection: React.FC<MagicienSectionProps> = ({ evaluationData
   };
 
   const totalAdjustedKg = Object.values(adjustedTargets).reduce((a: number, b: number) => a + b, 0);
+  
+  const activeTemplate = PERSONA_TEMPLATES.find(p => p.id === evaluationData.selectedPersonaId);
 
   // --- 2. SMART GENERATION ALGORITHM ---
   const generateProposal = () => {
@@ -73,10 +76,6 @@ export const MagicienSection: React.FC<MagicienSectionProps> = ({ evaluationData
       
       let availableProducts = products.filter(p => p.isAvailable);
       
-      // HALAL LOGIC (Page 4 of PDF)
-      // If client selected Halal category products often, prefer halal supplier if available (future logic)
-      // Currently we just check availability.
-
       const newCart: CartItem[] = [];
       const deliveries = [1, 2, 3, 4];
       
@@ -156,6 +155,14 @@ export const MagicienSection: React.FC<MagicienSectionProps> = ({ evaluationData
                   <div className="relative z-10">
                       <h3 className="text-purple-300 font-bold uppercase tracking-wider text-xs mb-2 flex items-center gap-2"><BrainCircuit className="w-4 h-4"/> Analyse IA (Données 2025)</h3>
                       <div className="space-y-4">
+                          {activeTemplate && (
+                              <div className="mb-4 bg-white/10 p-2 rounded-lg border border-white/20">
+                                  <p className="text-[10px] text-gray-300 uppercase font-bold">Package Actif</p>
+                                  <p className="text-sm font-bold text-white flex items-center gap-2">
+                                      {activeTemplate.label}
+                                  </p>
+                              </div>
+                          )}
                           <div>
                               <p className="text-3xl font-bold">{analysis.totalKg.toFixed(1)} kg</p>
                               <p className="text-sm text-slate-400">Volume Annuel Ciblé</p>

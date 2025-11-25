@@ -90,6 +90,9 @@ export interface EvaluationData {
   proteinSubPreferences: Record<string, number>;
   // Stores specific Product IDs for custom slots (e.g. { 'beef_slot_1': 'p_123' })
   customSelections: Record<string, string>;
+  
+  // Tracks the active AI Template (Package)
+  selectedPersonaId?: string;
 }
 
 // Knowledge Base Types (Based on PDF)

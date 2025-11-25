@@ -1,6 +1,7 @@
 
+
 import React, { useMemo } from 'react';
-import { Scale, Users, CalendarDays, Repeat, Calculator, ChefHat, Beef, Drumstick, Fish, ScrollText, Minus, Plus, UtensilsCrossed, Pencil, ChevronDown, Sparkles, Flame, PiggyBank, Dumbbell, Zap, User, UserPlus, Baby } from 'lucide-react';
+import { Scale, Users, CalendarDays, Repeat, Calculator, ChefHat, Beef, Drumstick, Fish, ScrollText, Minus, Plus, UtensilsCrossed, Pencil, ChevronDown, Sparkles, Flame, PiggyBank, Dumbbell, Zap, User, UserPlus, Baby, Box } from 'lucide-react';
 import { EvaluationData, Product } from '../types';
 import { PERSONA_TEMPLATES, AMQ_KNOWLEDGE_BASE } from '../constants';
 
@@ -141,10 +142,11 @@ export const EvaluationSection: React.FC<EvaluationSectionProps> = ({ formData, 
       setFormData({
           ...formData,
           customSelections: newCustomSelections,
-          proteinSubPreferences: newSubPreferences
+          proteinSubPreferences: newSubPreferences,
+          selectedPersonaId: personaId
       });
       
-      alert(`Profil "${template.label}" appliqué avec succès !`);
+      // alert(`Profil "${template.label}" appliqué avec succès !`);
   };
 
   // --- KNOWLEDGE BASE PROFILE LOADER ---
@@ -178,6 +180,8 @@ export const EvaluationSection: React.FC<EvaluationSectionProps> = ({ formData, 
           case 'PiggyBank': return PiggyBank;
           case 'Dumbbell': return Dumbbell;
           case 'Zap': return Zap;
+          case 'Box': return Box;
+          case 'UserPlus': return UserPlus;
           default: return Sparkles;
       }
   };
@@ -226,28 +230,33 @@ export const EvaluationSection: React.FC<EvaluationSectionProps> = ({ formData, 
       <div className="mb-8 border-t border-gray-100 pt-6">
           <div className="flex items-center gap-2 mb-3">
               <Sparkles className="w-4 h-4 text-purple-600" />
-              <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wide">Styles de Consommation</h3>
+              <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wide">Scénarios & Templates</h3>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               {PERSONA_TEMPLATES.map(persona => {
                   const Icon = getPersonaIcon(persona.iconName);
+                  const isSelected = formData.selectedPersonaId === persona.id;
+                  
                   const colorClass = 
                     persona.color === 'orange' ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' :
                     persona.color === 'green' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' :
                     persona.color === 'blue' ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' :
+                    persona.color === 'purple' ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' :
                     'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100';
+
+                  const selectedClass = isSelected ? 'ring-2 ring-slate-900 ring-offset-2 scale-[1.02] shadow-md' : '';
 
                   return (
                       <button 
                         key={persona.id}
                         onClick={() => applyPersona(persona.id)}
-                        className={`text-left p-3 rounded-xl border transition-all hover:scale-[1.02] hover:shadow-md ${colorClass}`}
+                        className={`text-left p-3 rounded-xl border transition-all hover:scale-[1.02] hover:shadow-md ${colorClass} ${selectedClass}`}
                       >
                           <div className="flex items-center gap-2 mb-1">
                               <Icon className="w-5 h-5" />
-                              <span className="font-bold text-sm leading-tight">{persona.label}</span>
+                              <span className="font-bold text-xs leading-tight">{persona.label}</span>
                           </div>
-                          <p className="text-[10px] opacity-80 leading-tight">{persona.description}</p>
+                          <p className="text-[10px] opacity-80 leading-tight line-clamp-2">{persona.description}</p>
                       </button>
                   )
               })}
