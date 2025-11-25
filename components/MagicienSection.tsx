@@ -86,7 +86,11 @@ export const MagicienSection: React.FC<MagicienSectionProps> = ({ evaluationData
               const currentQty = existing.quantities[delivery] || 0;
               existing.quantities[delivery] = currentQty + quantity;
           } else {
-              newCart.push({ product, quantities: { [delivery]: quantity } });
+              newCart.push({ 
+                  product, 
+                  quantities: { [delivery]: quantity },
+                  lockState: 'SYSTEM_OPTIMIZED' 
+              });
           }
       };
 

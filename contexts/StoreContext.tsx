@@ -1,7 +1,8 @@
 
+
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
-import { Product, CartItem, ClientInfo, Settings, EvaluationData, KnowledgeSource } from '../types';
-import { PRODUCT_CATALOG, detectSmartCategory } from '../constants';
+import { Product, CartItem, ClientInfo, Settings, EvaluationData, KnowledgeSource, AppConfig, LockState, PlannerConfig } from '../types';
+import { PRODUCT_CATALOG, detectSmartCategory, DEFAULT_APP_CONFIGS, DEFAULT_PLANNER_CONFIG } from '../constants';
 
 // --- 1. PRODUCT & SETTINGS CONTEXT ---
 interface ProductContextType {
@@ -18,6 +19,17 @@ interface ProductContextType {
   // Settings & Utils
   settings: Settings;
   setSettings: (settings: Settings) => void;
+  
+  // New Logic Control
+  appConfigs: AppConfig[];
+  toggleConfig: (key: string) => void;
+  addAppConfig: (config: AppConfig) => void;
+  resetAppConfigs: () => void;
+
+  // Smart Planner Logic Control
+  plannerConfig: PlannerConfig;
+  updatePlannerConfig: (newConfig: PlannerConfig) => void;
+
   saveProducts: () => void;
   resetCatalog: () => void;
 }
@@ -65,10 +77,40 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   });
 
+  // APP CONFIGS: Global logic switches
+  const [appConfigs, setAppConfigs] = useState<AppConfig[]>(() => {
+      try {
+          const saved = localStorage.getItem('amq_app_configs');
+          return saved ? JSON.parse(saved) : DEFAULT_APP_CONFIGS;
+      } catch {
+          return DEFAULT_APP_CONFIGS;
+      }
+  });
+
+  // PLANNER CONFIG: Smart Planner Rules
+  const [plannerConfig, setPlannerConfig] = useState<PlannerConfig>(() => {
+      try {
+          const saved = localStorage.getItem('amq_planner_config');
+          return saved ? JSON.parse(saved) : DEFAULT_PLANNER_CONFIG;
+      } catch {
+          return DEFAULT_PLANNER_CONFIG;
+      }
+  });
+
   // Persist Staging Changes
   useEffect(() => {
     localStorage.setItem('amq_staging_v1', JSON.stringify(stagingCatalog));
   }, [stagingCatalog]);
+
+  // Persist App Configs
+  useEffect(() => {
+    localStorage.setItem('amq_app_configs', JSON.stringify(appConfigs));
+  }, [appConfigs]);
+
+  // Persist Planner Config
+  useEffect(() => {
+    localStorage.setItem('amq_planner_config', JSON.stringify(plannerConfig));
+  }, [plannerConfig]);
 
   const saveProducts = () => {
     try {
@@ -90,6 +132,23 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
             confidenceScore: 1
         }))); 
     }
+  };
+
+  const toggleConfig = (key: string) => {
+      setAppConfigs(prev => prev.map(c => c.key === key ? { ...c, isActive: !c.isActive } : c));
+  };
+
+  const addAppConfig = (config: AppConfig) => {
+      setAppConfigs(prev => [...prev, config]);
+  };
+
+  const resetAppConfigs = () => {
+      setAppConfigs(DEFAULT_APP_CONFIGS);
+      alert("Configuration système réinitialisée aux valeurs d'usine.");
+  };
+
+  const updatePlannerConfig = (newConfig: PlannerConfig) => {
+      setPlannerConfig(newConfig);
   };
 
   // KMS: Commit Staging to Live
@@ -138,6 +197,12 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
         discardStaging,
         settings, 
         setSettings, 
+        appConfigs,
+        toggleConfig,
+        addAppConfig,
+        resetAppConfigs,
+        plannerConfig,
+        updatePlannerConfig,
         saveProducts, 
         resetCatalog 
     }}>
@@ -160,13 +225,22 @@ interface ClientContextType {
   evaluationData: EvaluationData;
   setEvaluationData: (data: EvaluationData) => void;
   pickupList: Product[];
+  setPickupList: (list: Product[]) => void;
   addToPickupList: (product: Product) => void;
 }
 
 const ClientContext = createContext<ClientContextType | undefined>(undefined);
 
 export const ClientProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [clientInfo, setClientInfo] = useState<ClientInfo>({ contactPrincipal: '', telephone: '', courriel: '', client2: '', adresse: '', ville: '', province: 'Québec', codePostal: '' });
+  const [clientInfo, setClientInfo] = useState<ClientInfo>({ 
+      contactPrincipal: '', telephone: '', courriel: '', client2: '', 
+      adresse: '', ville: '', province: 'Québec', codePostal: '',
+      // Freezer Defaults
+      fridgeFreezerCapacity: 3.5, 
+      fridgeFreezerEfficiency: 0.75,
+      chestFreezerCapacity: 0, // None by default
+      chestFreezerEfficiency: 0.90
+  });
   const [pickupList, setPickupList] = useState<Product[]>([]);
 
   const [evaluationData, setEvaluationData] = useState<EvaluationData>(() => {
@@ -189,14 +263,16 @@ export const ClientProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           premiumFrequency: 12, proteinRepetition: 3, gramsPerPerson: 150, 
           restrictions: '', currentGrocery: '', hasPreviousService: false, notes: '',
           proteinSubPreferences: {}, 
-          customSelections: initialCustomSelections
+          customSelections: initialCustomSelections,
+          // P2: Context Variable Init
+          userIANATimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
       };
   });
 
   const addToPickupList = (product: Product) => setPickupList(prev => [...prev, product]);
 
   return (
-    <ClientContext.Provider value={{ clientInfo, setClientInfo, evaluationData, setEvaluationData, pickupList, addToPickupList }}>
+    <ClientContext.Provider value={{ clientInfo, setClientInfo, evaluationData, setEvaluationData, pickupList, setPickupList, addToPickupList }}>
       {children}
     </ClientContext.Provider>
   );
@@ -214,6 +290,7 @@ interface CartContextType {
   cart: CartItem[];
   setCart: (cart: CartItem[]) => void;
   updateQuantity: (product: Product, deliveryIndex: number, delta: number) => void;
+  updateLockState: (product: Product, state: LockState) => void;
   removeFromCart: (productId: string) => void;
   grandTotal: number;
   cartCount: number;
@@ -239,13 +316,35 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           if (totalQty <= 0) return prevCart.filter((_, index) => index !== existingItemIndex);
 
-          newCart[existingItemIndex] = { ...existingItem, quantities: newQuantities };
+          // SRE: If user manually changes quantity, we assume it's a manual override (USER_PINNED)
+          // unless explicitly handled elsewhere.
+          const newLockState = delta !== 0 ? 'USER_PINNED' : existingItem.lockState;
+
+          newCart[existingItemIndex] = { 
+              ...existingItem, 
+              quantities: newQuantities,
+              lockState: newLockState,
+              lastModifiedUTC: new Date().toISOString()
+          };
           return newCart;
         } else if (delta > 0) {
-          return [...prevCart, { product, quantities: { [deliveryIndex]: delta } }];
+          // New Item Default: SYSTEM_OPTIMIZED (Subject to change by user)
+          // If added via UI (Manual), logic in App.tsx might need to flip this, but for now defaults to User Pinned if manual
+          return [...prevCart, { 
+              product, 
+              quantities: { [deliveryIndex]: delta },
+              lockState: 'USER_PINNED', // Manual Add = User Pinned
+              lastModifiedUTC: new Date().toISOString()
+          }];
         }
         return prevCart;
       });
+  };
+
+  const updateLockState = (product: Product, state: LockState) => {
+      setCart(prev => prev.map(item => 
+          item.product.id === product.id ? { ...item, lockState: state } : item
+      ));
   };
 
   const removeFromCart = (productId: string) => setCart((prev) => prev.filter((item) => item.product.id !== productId));
@@ -265,7 +364,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const cartCount = cart.reduce((sum: number, item) => sum + (Object.values(item.quantities) as number[]).reduce((a, b) => a + b, 0), 0);
 
   return (
-    <CartContext.Provider value={{ cart, setCart, updateQuantity, removeFromCart, grandTotal, cartCount }}>
+    <CartContext.Provider value={{ cart, setCart, updateQuantity, updateLockState, removeFromCart, grandTotal, cartCount }}>
       {children}
     </CartContext.Provider>
   );

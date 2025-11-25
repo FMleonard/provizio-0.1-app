@@ -1,6 +1,7 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Truck, Utensils, ChefHat, ArrowRightLeft, Sparkles, Clock, X, Loader } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Truck, Utensils, ChefHat, ArrowRightLeft, Sparkles, Clock, X, Loader, Lock, LockOpen } from 'lucide-react';
 import { CartItem, EvaluationData, Product } from '../types';
 import { GoogleGenAI } from "@google/genai";
 
@@ -30,11 +31,22 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
   const [generatedRecipes, setGeneratedRecipes] = useState<Recipe[] | null>(null);
   const [isRecipeLoading, setIsRecipeLoading] = useState(false);
 
+  // SRE: Temporal Edge Case Fix (Timezone Safe)
   const getStartDate = () => { 
-    let date = new Date(); 
-    date.setDate(date.getDate() + 7); 
-    while (date.getDay() === 0) date.setDate(date.getDate() + 1); 
+    // Create Date in UTC to avoid DST jumps
+    const now = new Date();
+    const utcNow = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    let date = new Date(utcNow);
+    date.setUTCDate(date.getUTCDate() + 7); 
+    // Align to Monday
+    while (date.getUTCDay() !== 1) date.setUTCDate(date.getUTCDate() + 1); 
     return date; 
+  };
+
+  // SRE: Idempotency Fix (Deterministic Random)
+  const pseudoRandom = (seed: number) => {
+      let x = Math.sin(seed) * 10000;
+      return x - Math.floor(x);
   };
 
   useEffect(() => {
@@ -47,8 +59,9 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
     
     const plan = [];
     let currentSimulationDate = getStartDate();
-    const oneYearLater = new Date(currentSimulationDate);
-    oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+    // Explicit Year Boundary Handling
+    const endSimulationDate = new Date(currentSimulationDate);
+    endSimulationDate.setUTCFullYear(endSimulationDate.getUTCFullYear() + 1);
 
     const getFreqFactor = (f: string) => f === 'full' ? 1 : f === 'biweekly' ? 0.5 : 0.14;
     const avgConsumption = (evaluationData.adults + (evaluationData.teens * getFreqFactor(evaluationData.teensFrequency)) + (evaluationData.children * 0.5 * getFreqFactor(evaluationData.childrenFrequency))) * gramsPerPerson;
@@ -74,11 +87,21 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
         });
     });
 
+    // SRE Fix: Deterministic Sort
     Object.keys(stockByDelivery).forEach(key => {
         const liv = parseInt(key);
-        stockByDelivery[liv].staple = stockByDelivery[liv].staple.sort(() => Math.random() - 0.5);
-        stockByDelivery[liv].quick = stockByDelivery[liv].quick.sort(() => Math.random() - 0.5);
-        stockByDelivery[liv].roast = stockByDelivery[liv].roast.sort(() => Math.random() - 0.5);
+        // Use a fixed seed + product ID for deterministic shuffle
+        const seed = currentSimulationDate.getTime() + liv; 
+        
+        const sorter = (a: Product, b: Product) => {
+            const valA = a.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            const valB = b.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            return pseudoRandom(valA + seed) - pseudoRandom(valB + seed);
+        };
+
+        stockByDelivery[liv].staple.sort(sorter);
+        stockByDelivery[liv].quick.sort(sorter);
+        stockByDelivery[liv].roast.sort(sorter);
     });
 
     let activeDelivery = 1;
@@ -86,11 +109,13 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
     let history: { date: Date, productId: string, category: string, texture?: string }[] = [];
     let mealsPlannedThisWeek = 0;
     
-    while (currentSimulationDate < oneYearLater) {
-        const dayPlan: any = { date: new Date(currentSimulationDate) };
-        const dayOfWeek = currentSimulationDate.getDay(); 
+    while (currentSimulationDate < endSimulationDate) {
+        // Use UTC date for data object
+        const safeDate = new Date(currentSimulationDate);
+        const dayPlan: any = { date: safeDate };
+        const dayOfWeek = safeDate.getUTCDay(); 
         
-        if (dayOfWeek === 1) mealsPlannedThisWeek = 0;
+        if (dayOfWeek === 1) mealsPlannedThisWeek = 0; // Reset on Monday
 
         const uiIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
         const isEatingDay = (evaluationData.proteinDays || [1,1,1,1,1,1,1])[uiIndex] === 1;
@@ -156,8 +181,9 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
             
             if (selectedMeal) { 
                 dayPlan.meal = selectedMeal; 
+                dayPlan.locked = false; // Default unlocked
                 history.push({ 
-                    date: new Date(currentSimulationDate), 
+                    date: safeDate, 
                     productId: selectedMeal.id, 
                     category: selectedMeal.category,
                     texture: selectedMeal.texture
@@ -167,10 +193,11 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
         } else { dayPlan.isFreeDay = true; }
 
         plan.push(dayPlan);
-        currentSimulationDate.setDate(currentSimulationDate.getDate() + 1);
+        // Increment safely
+        currentSimulationDate.setUTCDate(currentSimulationDate.getUTCDate() + 1);
     }
     setCalendarData(plan);
-  }, [cart, evaluationData]); // Note: Removed calendarData from deps to avoid loop
+  }, [cart, evaluationData]); 
 
   const handleDayClick = (day: any, index: number) => {
       if (isSwapMode) {
@@ -193,6 +220,11 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
               dayB.meal = tempMeal;
               dayB.isFreeDay = tempFree;
               
+              // SRE: LOCK ON INTERACTION (Contradicting Logic Fix)
+              // If user manually swaps, it becomes USER_PINNED logic (visually represented by lock)
+              if (dayA.meal) dayA.locked = true;
+              if (dayB.meal) dayB.locked = true;
+
               setCalendarData(newData);
               setSelectedDayIndex(null);
           }
@@ -238,7 +270,11 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
       const month = currentDate.getMonth();
       const startOfMonth = new Date(year, month, 1);
       // Find the index in calendarData for the first day of this month
-      const startIndex = calendarData.findIndex(d => d.date.getMonth() === month && d.date.getFullYear() === year);
+      // Note: Comparing local date components because Calendar UI is local time
+      const startIndex = calendarData.findIndex(d => {
+          const date = d.date; // These are JS dates
+          return date.getMonth() === month && date.getFullYear() === year;
+      });
       
       if (startIndex === -1) return [];
 
@@ -310,6 +346,7 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
                             <div className="flex justify-between items-start mb-1.5">
                                 <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${day?.isDeliveryDay ? 'bg-yellow-200 text-yellow-800' : day ? 'text-slate-400 bg-slate-50' : ''}`}>{day ? day.date.getDate() : ''}</span>
                                 {day?.isDeliveryDay && <span title={`Livraison #${day.deliveryIndex}`}><Truck className="w-4 h-4 text-yellow-600" /></span>}
+                                {day?.locked && <Lock className="w-3 h-3 text-slate-400" />}
                             </div>
                             
                             {day?.meal ? (

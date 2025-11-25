@@ -1,7 +1,10 @@
+
+
 import React, { useState, useMemo } from 'react';
 import { CartItem, ClientInfo, Settings } from '../types';
-import { Printer, TrendingUp, DollarSign, FileSignature, CheckCircle2, Box, Snowflake } from 'lucide-react';
+import { Printer, TrendingUp, DollarSign, FileSignature, CheckCircle2, Box, Snowflake, ShoppingBag } from 'lucide-react';
 import { AMQ_KNOWLEDGE_BASE } from '../constants';
+import { useProducts } from '../contexts/StoreContext';
 
 interface SummarySectionProps {
   cart: CartItem[];
@@ -11,8 +14,12 @@ interface SummarySectionProps {
   settings?: Settings;
 }
 
-export const SummarySection: React.FC<SummarySectionProps> = ({ cart, grandTotal, clientInfo, settings }) => {
+export const SummarySection: React.FC<SummarySectionProps> = ({ cart, grandTotal, clientInfo, settings, pickupList = [] }) => {
   const [isPrintMode, setIsPrintMode] = useState(false);
+  const { appConfigs } = useProducts();
+
+  // Logic Control: Tax Exemption
+  const taxExemptFood = appConfigs.find(c => c.key === 'tax_exempt_food')?.isActive || false;
 
   // Cost Analysis based on PDF Savings (Min 12% - Max 32%)
   // We use 1.32 factor to represent the grocery price which is 32% higher than our bulk price
@@ -40,6 +47,15 @@ export const SummarySection: React.FC<SummarySectionProps> = ({ cart, grandTotal
 
   const handlePrint = () => {
       window.print();
+  };
+
+  const calculateTaxes = (item: CartItem) => {
+      if (taxExemptFood && item.product.category !== 'Prêt-à-manger') {
+          // Simplistic logic: If food exempt is ON, treat almost everything as 0 tax for now
+          // In real app, we'd check specific taxable categories
+          return 0;
+      }
+      return (item.product.salePrice || item.product.price) * 0.15; // 15% placeholder
   };
 
   return (
@@ -137,6 +153,25 @@ export const SummarySection: React.FC<SummarySectionProps> = ({ cart, grandTotal
                   </div>
               </div>
           </div>
+
+          {/* PICKUP LIST (Condo Overflow) */}
+          {pickupList.length > 0 && (
+              <div className="bg-orange-50 border border-orange-200 rounded-3xl p-8 max-w-6xl mx-auto shadow-sm">
+                  <h3 className="text-xl font-bold text-orange-800 flex items-center gap-2 mb-4">
+                      <ShoppingBag className="w-6 h-6"/> Articles à ramasser en succursale
+                  </h3>
+                  <p className="text-orange-700 mb-6 text-sm">Ces articles ont été retirés de la livraison pour optimiser l'espace congélateur (Mode Condo). Ils sont disponibles pour ramassage à l'unité.</p>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                      {pickupList.map(item => (
+                          <div key={item.id} className="bg-white p-4 rounded-xl border border-orange-100 shadow-sm">
+                              <p className="font-bold text-sm text-slate-800 line-clamp-2 mb-2">{item.name}</p>
+                              <p className="text-xs text-gray-500">{item.format}</p>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          )}
           
           {/* Action Area */}
           <div className="bg-white border border-gray-100 p-8 rounded-3xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-8 max-w-6xl mx-auto">
@@ -173,6 +208,7 @@ export const SummarySection: React.FC<SummarySectionProps> = ({ cart, grandTotal
                   <p>Date: {new Date().toLocaleDateString()}</p>
                   <p className="font-bold text-xl mt-2">Total: {grandTotal.toFixed(2)}$</p>
                   <p className="text-sm text-slate-500">(Taxes incluses si applicable)</p>
+                  {taxExemptFood && <p className="text-xs font-bold text-green-700 mt-1">** EXEMPTION TAXES ALIMENTAIRES APPLIQUÉE **</p>}
               </div>
           </div>
 

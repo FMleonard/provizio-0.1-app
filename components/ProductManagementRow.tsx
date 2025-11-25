@@ -1,6 +1,9 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { Product } from '../types';
 import { CATEGORIES } from '../constants';
+import { useProducts } from '../contexts/StoreContext';
 
 interface ProductManagementRowProps {
   product: Product;
@@ -9,12 +12,18 @@ interface ProductManagementRowProps {
 
 export const ProductManagementRow: React.FC<ProductManagementRowProps> = ({ product, onUpdate }) => {
   const [localProduct, setLocalProduct] = useState(product);
+  const { appConfigs } = useProducts();
   
+  // Logic Control: Check if 3 decimals are enabled
+  const show3Decimals = appConfigs.find(c => c.key === 'display_3_decimals')?.isActive || false;
+
   useEffect(() => { setLocalProduct(product); }, [product]);
   
   const handleSave = () => { onUpdate(localProduct); };
-  const pricePerUnit = product.unitCount ? (product.price / product.unitCount).toFixed(2) : '-';
-  const pricePerGram = product.totalWeightGrams ? (product.price / product.totalWeightGrams).toFixed(3) : '-';
+  
+  // Logic: Dynamic Decimal Precision
+  const pricePerUnit = product.unitCount ? (product.price / product.unitCount).toFixed(show3Decimals ? 3 : 2) : '-';
+  const pricePerGram = product.totalWeightGrams ? (product.price / product.totalWeightGrams).toFixed(show3Decimals ? 4 : 3) : '-';
   
   return (
     <div className={`border-b border-gray-100 p-4 ${!localProduct.isAvailable ? 'bg-gray-50 opacity-70' : 'bg-white'}`}>
@@ -75,7 +84,7 @@ export const ProductManagementRow: React.FC<ProductManagementRowProps> = ({ prod
             </div>
             
             <div className="col-span-3 md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3">
-                <label className="text-xs text-slate-500">Prix <input type="number" className="block w-full border rounded p-1 font-bold" value={localProduct.price} onChange={(e) => setLocalProduct({...localProduct, price: parseFloat(e.target.value)})} onBlur={handleSave} /></label>
+                <label className="text-xs text-slate-500">Prix <input type="number" step={show3Decimals ? "0.001" : "0.01"} className="block w-full border rounded p-1 font-bold" value={localProduct.price} onChange={(e) => setLocalProduct({...localProduct, price: parseFloat(e.target.value)})} onBlur={handleSave} /></label>
                 <label className="text-xs text-slate-500">Nb/Boîte <input type="number" className="block w-full border rounded p-1" value={localProduct.unitCount || ''} onChange={(e) => setLocalProduct({...localProduct, unitCount: parseInt(e.target.value)})} onBlur={handleSave} /></label>
                 <label className="text-xs text-slate-500">Poids(g) <input type="number" className="block w-full border rounded p-1" value={localProduct.totalWeightGrams || ''} onChange={(e) => setLocalProduct({...localProduct, totalWeightGrams: parseInt(e.target.value)})} onBlur={handleSave} /></label>
                 

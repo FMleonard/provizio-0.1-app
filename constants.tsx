@@ -1,7 +1,102 @@
 
 
+
+
 import { Percent, Beef, Drumstick, ChefHat, Fish, ScrollText, DollarSign, Utensils, Flame, PiggyBank, Dumbbell, Zap, Box, UserPlus } from 'lucide-react';
 import { HalalIcon } from './components/HalalIcon';
+import { AppConfig, PlannerConfig } from './types';
+
+// --- LOGIC CONTROL CENTER DEFAULTS ---
+export const DEFAULT_APP_CONFIGS: AppConfig[] = [
+    { 
+        key: 'tax_exempt_food', 
+        label: 'Exemption Taxes Alimentaires', 
+        description: 'Si actif, aucune taxe n\'est appliquée sur les produits de catégorie alimentaire.', 
+        isActive: true, 
+        category: 'financial' 
+    },
+    { 
+        key: 'display_3_decimals', 
+        label: 'Format Monétaire Précis', 
+        description: 'Afficher 3 décimales (ex: 0.045$) pour les coûts unitaires.', 
+        isActive: false, 
+        category: 'display' 
+    },
+    { 
+        key: 'stock_alert_strict', 
+        label: 'Alerte Stock Stricte', 
+        description: 'Déclencher une alerte rouge immédiate si le stock calculé est ≤ 0.', 
+        isActive: true, 
+        category: 'inventory' 
+    },
+    { 
+        key: 'dual_unit_display', 
+        label: 'Double Unité (Lbs + Kg)', 
+        description: 'Afficher simultanément le poids en Livres et en Kilogrammes.', 
+        isActive: true, 
+        category: 'display' 
+    },
+    { 
+        key: 'auto_recalc_portion', 
+        label: 'Recalcul Portion Auto', 
+        description: 'Mettre à jour le coût portion immédiatement si le prix d\'un ingrédient change.', 
+        isActive: true, 
+        category: 'financial' 
+    },
+    { 
+        key: 'prevent_zero_cost_save', 
+        label: 'Validation Prix', 
+        description: 'Interdire la sauvegarde ou l\'ajout au panier d\'un produit à 0.00$.', 
+        isActive: true, 
+        category: 'system' 
+    },
+    { 
+        key: 'auto_loss_calculation', 
+        label: 'Calcul de Perte Auto', 
+        description: 'Appliquer automatiquement un % de perte standard aux produits bruts.', 
+        isActive: false, 
+        category: 'financial' 
+    },
+    { 
+        key: 'show_supplier_ref', 
+        label: 'Afficher Réf. Fournisseur', 
+        description: 'Montrer le code fournisseur dans les listes de produits.', 
+        isActive: false, 
+        category: 'display' 
+    },
+    { 
+        key: 'enforce_fr_lang', 
+        label: 'Forcer Langue FR', 
+        description: 'Empêcher l\'utilisation de termes anglais dans les noms de produits.', 
+        isActive: false, 
+        category: 'system' 
+    },
+    { 
+        key: 'strict_inventory_lock', 
+        label: 'Verrouillage Inventaire', 
+        description: 'Empêcher la modification des produits si une commande est en cours.', 
+        isActive: false, 
+        category: 'inventory' 
+    }
+];
+
+export const DEFAULT_PLANNER_CONFIG: PlannerConfig = {
+    id: 'v1.0.0',
+    name: 'Factory Default',
+    status: 'live',
+    timestamp: new Date().toISOString(),
+    budget: { weeklyCap: 125, maxPricePerKg: 28 },
+    custody: { childFactor: 0.5, teenFactor: 0.75 },
+    essentials: { maxItems: 5, excludePremium: true },
+    vip: { premiumTarget: 104, sortingWeight: 2.0 },
+    condo: { overflowThreshold: 1.0, packDensity: 25 },
+    variety: { maxRedMeatPercentage: 0.40, minFishPercentage: 0.10, diversityPenaltyWeight: 5, forceVarietyInjection: true },
+    timeZoneProtocol: {
+        storageStandard: 'UTC',
+        contextVariable: 'User_IANA_TimeZone',
+        evaluationScope: 'Local_Wall_Clock_Time'
+    }
+};
 
 // --- AMQ KNOWLEDGE BASE (From PDF Report 2025) ---
 export const AMQ_KNOWLEDGE_BASE = {

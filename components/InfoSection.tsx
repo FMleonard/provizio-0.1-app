@@ -1,8 +1,10 @@
 
+
 import React, { useState } from 'react';
 import { Info, Search, ImageOff } from 'lucide-react';
 import { Product } from '../types';
 import { PRODUCT_CATALOG } from '../constants';
+import { useProducts } from '../contexts/StoreContext';
 
 export const InfoSection: React.FC = () => {
   // We need to access the products from localStorage to see the updated data
@@ -15,8 +17,21 @@ export const InfoSection: React.FC = () => {
       }
   });
   
+  const { appConfigs } = useProducts();
+  const showDualUnits = appConfigs.find(c => c.key === 'dual_unit_display')?.isActive || false;
+
   const [search, setSearch] = useState('');
   const filtered = localProducts.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.includes(search));
+
+  const formatWeight = (grams: number | undefined) => {
+      if (!grams) return 'N/A';
+      if (showDualUnits) {
+          const kg = (grams / 1000).toFixed(2);
+          const lbs = (grams * 0.00220462).toFixed(2);
+          return `${kg} kg (${lbs} lbs)`;
+      }
+      return `${grams}g`;
+  };
 
   return (
     <div className="p-6 bg-white rounded-2xl shadow-sm border border-gray-100 animate-in fade-in slide-in-from-bottom-4 w-full mx-auto">
@@ -70,6 +85,8 @@ export const InfoSection: React.FC = () => {
                             )}
                             <span className="text-gray-400">•</span>
                             <span className="text-gray-500">{product.format}</span>
+                            <span className="text-gray-400">•</span>
+                            <span className="text-gray-500">{formatWeight(product.totalWeightGrams)}</span>
                         </div>
                     </div>
                 </div>

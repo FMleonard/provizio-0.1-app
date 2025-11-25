@@ -1,6 +1,7 @@
 
+
 import React, { useState, useMemo } from 'react';
-import { ShoppingCart, Search, Menu, Calculator, ChevronUp, ChevronDown, Wand2, Calendar as CalendarIcon, UserCheck, Users, Utensils, Info, FileText, LayoutGrid, Home, Settings as SettingsIcon, Minus, Plus, Trash2, ArrowDown, Tag, X, Store } from 'lucide-react';
+import { ShoppingCart, Search, Menu, Calculator, ChevronUp, ChevronDown, Wand2, Calendar as CalendarIcon, UserCheck, Users, Utensils, Info, FileText, LayoutGrid, Home, Settings as SettingsIcon, Minus, Plus, Trash2, ArrowDown, Tag, X, Store, BrainCircuit, ShieldCheck, ChefHat } from 'lucide-react';
 import { CATEGORIES } from './constants';
 import { Product } from './types';
 import { SettingsDashboard } from './components/SettingsDashboard';
@@ -12,6 +13,9 @@ import { CalendarSection } from './components/CalendarSection';
 import { TastingSection } from './components/TastingSection';
 import { SummarySection } from './components/SummarySection';
 import { SuccursalesSection } from './components/SuccursalesSection';
+import { SmartPlanner } from './components/SmartPlanner';
+import { QualityChecklist } from './components/QualityChecklist';
+import { ChefRescousseSection } from './components/ChefRescousseSection';
 
 // Import Contexts
 import { ProductProvider, ClientProvider, CartProvider, useProducts, useCart, useClient } from './contexts/StoreContext';
@@ -29,7 +33,7 @@ function AppContent() {
   // Consume Contexts
   const { products, setSettings, saveProducts, resetCatalog } = useProducts();
   const { cart, setCart, updateQuantity, removeFromCart, grandTotal, cartCount } = useCart();
-  const { clientInfo, setClientInfo, evaluationData, setEvaluationData, pickupList } = useClient();
+  const { clientInfo, setClientInfo, evaluationData, setEvaluationData, pickupList, setPickupList } = useClient();
 
   // Derived UI State
   const filteredProducts = useMemo(() => 
@@ -150,13 +154,33 @@ function AppContent() {
                     </div>
                  </button>
              </div>
+             
+             {/* NEW SMART PLANNER BUTTON */}
+             <BentoButton 
+                view="smartplanner" 
+                icon={BrainCircuit} 
+                label="Smart Planner" 
+                colorClass="bg-gradient-to-br from-indigo-50 to-white text-indigo-700 border-indigo-100 hover:border-indigo-300" 
+                activeClass="bg-indigo-600 text-white ring-2 ring-indigo-600 ring-offset-2" 
+             />
 
              <BentoButton view="chat" icon={Wand2} label="Assistant IA" colorClass="bg-gradient-to-br from-purple-50 to-white text-purple-700 border-purple-100 hover:border-purple-300" activeClass="bg-purple-600 text-white ring-2 ring-purple-600 ring-offset-2" />
+             
+             {/* NEW CHEF BUTTON */}
+             <BentoButton 
+                view="chef" 
+                icon={ChefHat} 
+                label="Chef Rescousse" 
+                colorClass="bg-gradient-to-br from-orange-50 to-white text-orange-700 border-orange-100 hover:border-orange-300" 
+                activeClass="bg-orange-600 text-white ring-2 ring-orange-600 ring-offset-2" 
+             />
+
              <BentoButton view="calendar" icon={CalendarIcon} label="Planificateur" />
              <BentoButton view="client" icon={UserCheck} label="Client" />
              <BentoButton view="evaluation" icon={Users} label="Évaluation" />
              <BentoButton view="tasting" icon={Utensils} label="Dégustation" />
              <BentoButton view="succursales" icon={Store} label="Succursales" />
+             <BentoButton view="quality" icon={ShieldCheck} label="Qualité" colorClass="bg-blue-50 text-blue-700 border-blue-100 hover:border-blue-300" activeClass="bg-blue-600 text-white ring-2 ring-blue-600 ring-offset-2" />
              <div className="col-span-2">
                 <BentoButton view="info" icon={Info} label="Infos" />
              </div>
@@ -244,13 +268,13 @@ function AppContent() {
                     <Home className="w-6 h-6" />
                     <span className="text-[10px] font-bold mt-1">Boutique</span>
                 </button>
+                <button onClick={() => setCurrentView('chef')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentView === 'chef' ? 'text-orange-600 bg-orange-50' : 'text-gray-400'}`}>
+                    <ChefHat className="w-6 h-6" />
+                    <span className="text-[10px] font-bold mt-1">Chef</span>
+                </button>
                 <button onClick={() => setCurrentView('chat')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentView === 'chat' ? 'text-purple-600 bg-purple-50' : 'text-gray-400'}`}>
                     <Wand2 className="w-6 h-6" />
                     <span className="text-[10px] font-bold mt-1">Assistant</span>
-                </button>
-                <button onClick={() => setCurrentView('calendar')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentView === 'calendar' ? 'text-slate-800 bg-gray-100' : 'text-gray-400'}`}>
-                    <CalendarIcon className="w-6 h-6" />
-                    <span className="text-[10px] font-bold mt-1">Plan</span>
                 </button>
                 <button onClick={() => setIsCartOpen(true)} className="flex flex-col items-center p-2 rounded-xl text-gray-400 relative">
                     <ShoppingCart className="w-6 h-6" />
@@ -284,9 +308,23 @@ function AppContent() {
           {currentView === 'info' && <InfoSection />}
           {currentView === 'evaluation' && <EvaluationSection formData={evaluationData} setFormData={setEvaluationData} products={products} />}
           {currentView === 'chat' && <KnowledgeChat />}
+          {currentView === 'chef' && <ChefRescousseSection />}
+          {currentView === 'smartplanner' && (
+             <SmartPlanner 
+                products={products} 
+                evaluationData={evaluationData}
+                clientInfo={clientInfo}
+                onApplyPlan={(newCart, pickupSuggestions) => {
+                    setCart(newCart);
+                    if (pickupSuggestions) setPickupList(pickupSuggestions);
+                    setCurrentView('shop');
+                }}
+             />
+          )}
           {currentView === 'calendar' && <CalendarSection cart={cart} evaluationData={evaluationData} />}
           {currentView === 'tasting' && <TastingSection />}
           {currentView === 'succursales' && <SuccursalesSection />}
+          {currentView === 'quality' && <QualityChecklist />}
           {currentView === 'summary' && <SummarySection cart={cart} grandTotal={grandTotal} clientInfo={clientInfo} pickupList={pickupList} settings={useProducts().settings} />}
           {currentView === 'shop' && (
             <>
