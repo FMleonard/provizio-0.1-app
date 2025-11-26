@@ -1,7 +1,8 @@
 
 
+
 import React, { useState, useRef, useEffect } from 'react';
-import { Settings, Wand2, Download, Database, RotateCcw, Search, CheckCircle2, Save, Plus, X, Sparkles, AlertTriangle, BrainCircuit, RefreshCw, Globe, Loader, FileJson, ArrowRight, Link as LinkIcon, Image as ImageIcon, Zap, Microscope, BookOpen, Monitor, Trash2, CheckSquare, Square, FileText, Copy, LayoutDashboard, ChevronRight, Import, GitMerge } from 'lucide-react';
+import { Settings, Wand2, Download, Database, RotateCcw, Search, CheckCircle2, Save, Plus, X, Sparkles, AlertTriangle, BrainCircuit, RefreshCw, Globe, Loader, FileJson, ArrowRight, Link as LinkIcon, Image as ImageIcon, Zap, Microscope, BookOpen, Monitor, Trash2, CheckSquare, Square, FileText, Copy, LayoutDashboard, ChevronRight, Import, GitMerge, WifiOff } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { Product, Settings as SettingsType } from '../types';
 import { ProductManagementRow } from './ProductManagementRow';
@@ -358,34 +359,55 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
                   for (let i = 0; i < smartCards.length; i += BATCH_SIZE) {
                       const batch = smartCards.slice(i, i + BATCH_SIZE);
                       
-                      let batchPrompt = `
-                        I have a list of structured product cards (Text + optional URL + optional Image).
-                        Parse EACH block into a clean JSON object.
-                        
-                        Input Data:
-                        ${JSON.stringify(batch)}
-
-                        Return a JSON Array of objects with:
-                        - name (string, clean up)
-                        - price (number, extract from text)
-                        - salePrice (number, if a lower price exists in text)
-                        - format (string, e.g. "10 x 454g")
-                        - category (One of: Boeuf, Poulet, Porc, Poisson/Fruits de mer, Gibier & Autres, Prêt-à-manger, Epices)
-                        - productUrl (use the 'url' from input if available)
-                        - imageUrl (use the 'img' from input if available)
-                        - texture (e.g. ground, steak, roast)
-                      `;
-
+                      // Fallback logic inside loop
                       try {
-                        const result = await ai.models.generateContent({
-                            model: "gemini-2.5-flash",
-                            contents: batchPrompt,
-                            config: { responseMimeType: "application/json" }
-                        });
-                        const batchItems = safeJsonParse(result.text || "[]", []);
-                        if (Array.isArray(batchItems)) extractedItems.push(...batchItems);
+                          // Try AI Extraction first
+                          let batchPrompt = `
+                            I have a list of structured product cards (Text + optional URL + optional Image).
+                            Parse EACH block into a clean JSON object.
+                            
+                            Input Data:
+                            ${JSON.stringify(batch)}
+
+                            Return a JSON Array of objects with:
+                            - name (string, clean up)
+                            - price (number, extract from text)
+                            - salePrice (number, if a lower price exists in text)
+                            - format (string, e.g. "10 x 454g")
+                            - category (One of: Boeuf, Poulet, Porc, Poisson/Fruits de mer, Gibier & Autres, Prêt-à-manger, Epices)
+                            - productUrl (use the 'url' from input if available)
+                            - imageUrl (use the 'img' from input if available)
+                            - texture (e.g. ground, steak, roast)
+                          `;
+
+                          const result = await ai.models.generateContent({
+                                model: "gemini-2.5-flash",
+                                contents: batchPrompt,
+                                config: { responseMimeType: "application/json" }
+                          });
+                          const batchItems = safeJsonParse(result.text || "[]", []);
+                          if (Array.isArray(batchItems)) extractedItems.push(...batchItems);
+                      
                       } catch (e) {
-                          console.warn("Batch AI Error", e);
+                          addLog("⚠️ AI Quota Exceeded/Error. Switching to Manual Regex Extraction for this batch.");
+                          // MANUAL FALLBACK
+                          const manualItems = batch.map(card => {
+                                // Basic Regex Extraction
+                                const priceMatch = card.text.match(/(\d+[.,]\d+)\s?\$|\$\s?(\d+[.,]\d+)/);
+                                const price = priceMatch ? parseFloat((priceMatch[1] || priceMatch[2]).replace(',', '.')) : 0;
+                                const name = card.text.split('$')[0].split('|')[0].trim();
+                                
+                                return {
+                                    name: name,
+                                    price: price,
+                                    format: 'Unité',
+                                    category: detectSmartCategory(name),
+                                    productUrl: card.url,
+                                    imageUrl: card.img,
+                                    description: card.text // Dump raw text as description
+                                };
+                          });
+                          extractedItems.push(...manualItems);
                       }
                   }
               }
@@ -625,8 +647,12 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
 
                       {/* Right Column: Console & Action */}
                       <div className="space-y-6 flex flex-col">
-                          <div className="bg-slate-900 rounded-2xl p-5 text-green-400 font-mono text-xs flex-1 min-h-[300px] overflow-y-auto shadow-inner relative">
-                              {aiLoading && <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center backdrop-blur-sm z-10"><Loader className="w-8 h-8 animate-spin text-green-500"/></div>}
+                          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 text-green-300 font-mono text-xs flex-1 min-h-[300px] overflow-y-auto shadow-inner relative">
+                              {aiLoading && (
+                                  <div className="absolute top-4 right-4 p-2 bg-slate-900/80 rounded-full border border-green-900/30 z-10 shadow-lg">
+                                      <Loader className="w-4 h-4 animate-spin text-green-400"/>
+                                  </div>
+                              )}
                               {scrapeLogs.length === 0 ? (
                                   <div className="h-full flex flex-col items-center justify-center text-slate-700 opacity-50">
                                       <Monitor className="w-12 h-12 mb-2"/>
@@ -634,9 +660,9 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ settings, 
                                   </div>
                               ) : (
                                   scrapeLogs.map((log, i) => (
-                                      <div key={i} className="mb-1 border-b border-white/5 pb-1 last:border-0">
-                                          <span className="opacity-50 mr-2">[{new Date().toLocaleTimeString()}]</span>
-                                          {log}
+                                      <div key={i} className="mb-1 border-b border-white/5 pb-1 last:border-0 flex gap-2">
+                                          <span className="opacity-40 text-slate-500 shrink-0">[{new Date().toLocaleTimeString()}]</span>
+                                          <span className="break-all">{log}</span>
                                       </div>
                                   ))
                               )}

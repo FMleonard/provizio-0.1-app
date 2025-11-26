@@ -1,7 +1,8 @@
 
 
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Truck, Utensils, ChefHat, ArrowRightLeft, Sparkles, Clock, X, Loader, Lock, LockOpen } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Truck, Utensils, ChefHat, ArrowRightLeft, Sparkles, Clock, X, Loader, Lock, LockOpen, WifiOff } from 'lucide-react';
 import { CartItem, EvaluationData, Product } from '../types';
 import { GoogleGenAI } from "@google/genai";
 
@@ -30,6 +31,7 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
   const [selectedProductForRecipe, setSelectedProductForRecipe] = useState<Product | null>(null);
   const [generatedRecipes, setGeneratedRecipes] = useState<Recipe[] | null>(null);
   const [isRecipeLoading, setIsRecipeLoading] = useState(false);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   // SRE: Temporal Edge Case Fix (Timezone Safe)
   const getStartDate = () => { 
@@ -236,10 +238,47 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
       }
   };
 
+  const getFallbackRecipes = (productName: string): Recipe[] => [
+    {
+      title: `${productName} de semaine`,
+      time: "25 min",
+      difficulty: "Facile",
+      ingredients: [productName, "Légumes variés", "Riz", "Sauce Soya", "Ail"],
+      steps: [
+        `Coupez le ${productName} en lanières.`,
+        "Faites sauter avec les légumes.",
+        "Ajoutez la sauce et servez sur le riz."
+      ]
+    },
+    {
+      title: `${productName} au four`,
+      time: "45 min",
+      difficulty: "Moyen",
+      ingredients: [productName, "Pommes de terre", "Huile", "Herbes"],
+      steps: [
+        "Préchauffez le four.",
+        `Mettez le ${productName} et les patates sur une plaque.`,
+        "Cuisez jusqu'à ce que ce soit doré."
+      ]
+    },
+    {
+      title: `Sandwich de ${productName}`,
+      time: "15 min",
+      difficulty: "Facile",
+      ingredients: [productName, "Pain", "Laitue", "Tomate", "Mayo"],
+      steps: [
+        `Cuisez le ${productName}.`,
+        "Assemblez le sandwich avec vos garnitures préférées.",
+        "Dégustez !"
+      ]
+    }
+  ];
+
   const fetchRecipes = async (product: Product) => {
       setSelectedProductForRecipe(product);
       setGeneratedRecipes(null);
       setIsRecipeLoading(true);
+      setIsOfflineMode(false);
 
       try {
           const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -259,7 +298,9 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
           const recipes = JSON.parse(result.text || "[]");
           setGeneratedRecipes(recipes);
       } catch (e) {
-          console.error("Recipe gen error", e);
+          console.warn("Recipe AI Error / Quota", e);
+          setIsOfflineMode(true);
+          setGeneratedRecipes(getFallbackRecipes(product.name));
       } finally {
           setIsRecipeLoading(false);
       }
@@ -374,6 +415,7 @@ export const CalendarSection: React.FC<CalendarSectionProps> = ({ cart, evaluati
                         <div>
                             <div className="flex items-center gap-2 text-purple-600 font-bold text-xs uppercase tracking-wider mb-2">
                                 <Sparkles className="w-4 h-4" /> Suggestions IA
+                                {isOfflineMode && <span className="bg-orange-100 text-orange-600 px-2 rounded-full flex items-center gap-1"><WifiOff className="w-3 h-3"/> Offline</span>}
                             </div>
                             <h3 className="text-2xl font-bold text-slate-800">{selectedProductForRecipe.name}</h3>
                             <p className="text-slate-500 text-sm">3 façons délicieuses de cuisiner ce produit.</p>

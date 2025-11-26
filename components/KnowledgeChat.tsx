@@ -1,6 +1,8 @@
 
+
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Bot, User, Sparkles, Wand2, Loader, Terminal, ShoppingCart } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Wand2, Loader, Terminal, ShoppingCart, WifiOff, AlertTriangle } from 'lucide-react';
 import { GoogleGenAI, FunctionDeclaration, Type, ChatSession } from "@google/genai";
 import { useProducts, useClient, useCart } from '../contexts/StoreContext';
 
@@ -21,6 +23,7 @@ export const KnowledgeChat: React.FC = () => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [chatSession, setChatSession] = useState<ChatSession | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [errorCount, setErrorCount] = useState(0);
   
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -131,21 +134,26 @@ export const KnowledgeChat: React.FC = () => {
         setChatSession(chat);
 
         // B. Proactive Suggestions (One-off generation)
-        const suggestionPrompt = `
-          Context: Family of ${evaluationData.adults} adults, ${evaluationData.children} children. 
-          Current Cart Total: $${grandTotal}.
-          Generate 3 short, actionable suggestions for the user (e.g. "Add staple beef?", "Fill freezer?").
-          Return ONLY a JSON array of strings.
-        `;
-        
-        const suggestionRes = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: suggestionPrompt,
-            config: { responseMimeType: "application/json" }
-        });
-        
-        const suggestionsJson = JSON.parse(suggestionRes.text || "[]");
-        setSuggestions(suggestionsJson);
+        // Wrapped in try/catch to ensure chat works even if suggestions fail
+        try {
+            const suggestionPrompt = `
+            Context: Family of ${evaluationData.adults} adults, ${evaluationData.children} children. 
+            Current Cart Total: $${grandTotal}.
+            Generate 3 short, actionable suggestions for the user (e.g. "Add staple beef?", "Fill freezer?").
+            Return ONLY a JSON array of strings.
+            `;
+            
+            const suggestionRes = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: suggestionPrompt,
+                config: { responseMimeType: "application/json" }
+            });
+            
+            const suggestionsJson = JSON.parse(suggestionRes.text || "[]");
+            setSuggestions(suggestionsJson);
+        } catch (e) {
+            console.warn("Suggestions gen failed, skipping.");
+        }
         
         setMessages([{
             id: 'init',
@@ -250,10 +258,23 @@ User Message: ${text}
             content: response.text || "Action terminée." 
         };
         setMessages(prev => [...prev, modelMsg]);
+        setErrorCount(0); // Reset errors on success
 
     } catch (e) {
-        console.error(e);
-        setMessages(prev => [...prev, { id: 'err', role: 'system', content: "Erreur de communication avec l'IA." }]);
+        console.error("Provizio Chat Error:", e);
+        setErrorCount(prev => prev + 1);
+        
+        let fallbackMsg = "⚠️ **Mes circuits sont en surchauffe (Quota API atteint).** \n\nJe ne peux pas traiter votre demande complexe pour l'instant. Veuillez réessayer dans quelques instants ou utiliser les boutons manuels.";
+        
+        if (errorCount > 2) {
+             fallbackMsg = "⚠️ **Système Hors-Ligne** \n\nJe suis passé en mode maintenance. Continuez à utiliser l'application manuellement.";
+        }
+
+        setMessages(prev => [...prev, { 
+            id: 'err_' + Date.now(), 
+            role: 'model', 
+            content: fallbackMsg 
+        }]);
     } finally {
         setIsThinking(false);
     }
@@ -270,8 +291,11 @@ User Message: ${text}
             <div>
                 <h2 className="text-lg font-bold text-slate-800">Provizio AI</h2>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    Connecté au Catalogue
+                    {errorCount > 0 ? (
+                        <><span className="w-2 h-2 rounded-full bg-red-500"></span> Déconnecté (Quota/Err)</>
+                    ) : (
+                        <><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Connecté au Catalogue</>
+                    )}
                 </div>
             </div>
         </div>
@@ -293,8 +317,8 @@ User Message: ${text}
         {messages.map((msg) => (
             <div key={msg.id} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {msg.role === 'model' && (
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-2 flex-shrink-0 mt-1">
-                        <Bot className="w-4 h-4 text-purple-600" />
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 flex-shrink-0 mt-1 ${msg.content.includes('⚠️') ? 'bg-red-100' : 'bg-purple-100'}`}>
+                        {msg.content.includes('⚠️') ? <AlertTriangle className="w-4 h-4 text-red-600"/> : <Bot className="w-4 h-4 text-purple-600" />}
                     </div>
                 )}
                 
@@ -302,6 +326,7 @@ User Message: ${text}
                     max-w-[85%] rounded-2xl p-4 text-sm relative shadow-sm
                     ${msg.role === 'user' ? 'bg-slate-900 text-white rounded-tr-sm' : 
                       msg.role === 'system' ? 'bg-gray-50 text-gray-500 font-mono text-xs border border-gray-100 w-full' :
+                      msg.content.includes('⚠️') ? 'bg-red-50 text-red-800 border border-red-100 rounded-tl-sm' :
                       'bg-white border border-gray-100 text-slate-800 rounded-tl-sm'}
                 `}>
                     {msg.role === 'system' && <div className="flex items-center gap-2 mb-1 border-b border-gray-200 pb-1"><Terminal className="w-3 h-3"/> Log Système</div>}

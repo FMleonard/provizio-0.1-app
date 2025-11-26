@@ -6,7 +6,8 @@ import {
   FileSearch, Lock, Unlock, Zap, PlayCircle, Box, ChevronRight, 
   ChevronLeft, RotateCcw, Truck, Activity, Wand2, Flame, PiggyBank, 
   Dumbbell, UserPlus, Sparkles, ThermometerSnowflake, CheckCircle2,
-  ChefHat, Plus, Minus, MessageSquare, X, Cookie, Soup, Droplet, Fish
+  ChefHat, Plus, Minus, MessageSquare, X, Cookie, Soup, Droplet, Fish,
+  PieChart, TrendingUp, Calendar, AlertTriangle, Pencil, History
 } from 'lucide-react';
 import { Product, CartItem, EvaluationData, ClientInfo, PlannerConfig } from '../types';
 import { useCart, useProducts, useClient } from '../contexts/StoreContext';
@@ -51,6 +52,7 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
   const [isApplyingPersona, setIsApplyingPersona] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false); // AI Panel State
   const [activeCategoryTab, setActiveCategoryTab] = useState('Boeuf');
+  const [pendingPersona, setPendingPersona] = useState<string | null>(null); // Safety Guard State
   
   // --- LOCAL DATA BUFFER ---
   const [localClient, setLocalClient] = useState<ClientInfo>(initialClient);
@@ -75,94 +77,18 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
       { id: 'Sauce', label: 'Sauces', icon: <Droplet className="w-4 h-4"/>, color: 'text-cyan-700', bg: 'bg-cyan-50', prefix: 'sauce_slot' }
   ];
 
-  // --- STEP 1 LOGIC (FREEZER) ---
-  const totalUsableSpace = calculateFreezerSpace(localClient);
-
-  // --- STEP 2 LOGIC (PERSONA ENGINE) ---
-  const applyPersona = (personaId: string) => {
-      setIsApplyingPersona(true);
-      const template = PERSONA_TEMPLATES.find(p => p.id === personaId);
-      if (!template) { setIsApplyingPersona(false); return; }
-
-      setTimeout(() => {
-          const newCustomSelections = { ...localData.customSelections };
-          const newSubPreferences = { ...localData.proteinSubPreferences };
-          
-          // Clear existing prefs
-          Object.keys(newSubPreferences).forEach(k => newSubPreferences[k] = 0);
-          
-          // STRICT DUPLICATE PREVENTION SET
-          const globalUsedIds = new Set<string>();
-
-          // Iterate Categories
-          butcherCategories.forEach(cat => {
-              let catRules = template.rules[cat.id as keyof typeof template.rules] || [];
-              
-              const catCandidates = products.filter(p => {
-                  if (cat.id === 'Extra') return p.category === 'Prêt-à-manger' || p.category === 'Gibier & Autres';
-                  if (cat.id === 'Poisson') return p.category.includes('Poisson') || p.category.includes('mer');
-                  return p.category === cat.id;
-              });
-
-              let slotIndex = 1;
-
-              catRules.forEach(rule => {
-                  let bestMatch: Product | undefined;
-                  
-                  // Try to find a match that hasn't been used globally
-                  for (const keyword of rule.keywords) {
-                      bestMatch = catCandidates.find(p => 
-                          !globalUsedIds.has(p.id) && 
-                          p.name.toLowerCase().includes(keyword.toLowerCase()) &&
-                          p.isAvailable
-                      );
-                      if (bestMatch) break;
-                  }
-
-                  // Fallback: any unused product in category
-                  if (!bestMatch) {
-                      bestMatch = catCandidates.find(p => !globalUsedIds.has(p.id) && p.isAvailable);
-                  }
-
-                  if (bestMatch && slotIndex <= 10) {
-                      const slotName = `${cat.prefix}_${slotIndex}`;
-                      const slotKey = `Custom|${slotName}`;
-                      
-                      newCustomSelections[slotName] = bestMatch.id;
-                      newSubPreferences[slotKey] = rule.freq;
-                      
-                      globalUsedIds.add(bestMatch.id);
-                      slotIndex++;
-                  }
-              });
-          });
-
-          // PRE-FILL FAMILY IF EMPTY
-          let updatedClient = { ...localData };
-          if (localData.adults === 0 && localData.children === 0) {
-               if (personaId.includes('family')) { updatedClient.adults = 2; updatedClient.children = 2; }
-               else if (personaId.includes('shared')) { updatedClient.adults = 1; updatedClient.children = 2; }
-               else if (personaId === 'essentials' || personaId === 'premium') { updatedClient.adults = 2; }
-          }
-          
-          // SET DEFAULT BUDGET
-          updatedClient.targetWeeklyBudget = template.defaultBudget || 250;
-
-          setLocalData({
-              ...updatedClient,
-              customSelections: newCustomSelections,
-              proteinSubPreferences: newSubPreferences,
-              selectedPersonaId: personaId
-          });
-          setIsApplyingPersona(false);
-      }, 400); 
-  };
-
-  const calculateProjectedCost = () => {
+  // --- LIVE ANALYSIS ENGINE ---
+  const liveStats = useMemo(() => {
       const gramsPerPerson = localData.gramsPerPerson || 150;
+      // Portion calculation based on family size
       const portions = (localData.adults) + (localData.children * 0.5) + (localData.teens * 0.75);
       const subPrefs = localData.proteinSubPreferences || {};
-      let totalAnnualCost = 0;
+      
+      let projectedAnnualCost = 0;
+      let totalAnnualMeals = 0;
+      let premiumMeals = 0;
+      let baseMeals = 0;
+      let readyMeals = 0;
 
       Object.entries(subPrefs).forEach(([key, freq]) => {
           if (Number(freq) <= 0) return;
@@ -175,36 +101,202 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
           }
           
           if (product) {
+              const annualMealsForSlot = Number(freq) * 52;
               const mealWeightGrams = portions * gramsPerPerson;
-              const annualMeals = Number(freq) * 52;
-              const annualTotalWeight = mealWeightGrams * annualMeals;
+              const annualTotalWeight = mealWeightGrams * annualMealsForSlot;
               
               const boxWeight = product.totalWeightGrams || 5000;
-              let boxCount = annualTotalWeight / boxWeight;
+              // Ensure at least one box if frequency > 0, effectively rounding up for costing
+              let boxCount = Math.ceil(annualTotalWeight / boxWeight);
               
-              // Estimate cost continuously
-              totalAnnualCost += (product.salePrice || product.price) * boxCount;
+              projectedAnnualCost += (product.salePrice || product.price) * boxCount;
+              totalAnnualMeals += annualMealsForSlot;
+
+              if (product.isPremium) premiumMeals += annualMealsForSlot;
+              else if (product.category === 'Prêt-à-manger') readyMeals += annualMealsForSlot;
+              else baseMeals += annualMealsForSlot;
           }
       });
-      return totalAnnualCost;
+
+      // Coverage Calculation
+      // Total meals needed per year = 365 * (meals per day usually 1 supper)
+      const daysInYear = 365;
+      const restoDays = localData.restaurantFrequency || 0;
+      const effectiveDays = daysInYear - restoDays;
+      
+      // Assuming 1 main protein meal per day per effective day
+      const coveragePercent = effectiveDays > 0 ? (totalAnnualMeals / effectiveDays) * 100 : 0;
+      const weeklyCost = projectedAnnualCost / 52;
+
+      return {
+          weeklyCost,
+          annualCost: projectedAnnualCost,
+          totalMeals: totalAnnualMeals,
+          coveragePercent,
+          premiumRatio: totalAnnualMeals > 0 ? (premiumMeals / totalAnnualMeals) * 100 : 0,
+          baseRatio: totalAnnualMeals > 0 ? (baseMeals / totalAnnualMeals) * 100 : 0,
+          effectiveDays,
+          premiumMeals,
+          baseMeals
+      };
+  }, [localData, products]);
+
+  // --- STEP 1 LOGIC (FREEZER) ---
+  const totalUsableSpace = calculateFreezerSpace(localClient);
+
+  // --- STEP 2 LOGIC (PERSONA ENGINE) ---
+  
+  // The heavy lifting function, extracted for safety wrapping
+  const executePersonaApplication = (personaId: string) => {
+      setIsApplyingPersona(true);
+      const template = PERSONA_TEMPLATES.find(p => p.id === personaId);
+      if (!template) { setIsApplyingPersona(false); setPendingPersona(null); return; }
+
+      // 1. PREPARE NEW STATE
+      const newCustomSelections = { ...localData.customSelections };
+      const newSubPreferences: Record<string, number> = {};
+      
+      // Set default budget immediately
+      const targetBudget = template.defaultBudget || 250;
+      
+      // 2. POPULATE SLOTS INTELLIGENTLY
+      const globalUsedIds = new Set<string>();
+
+      butcherCategories.forEach(cat => {
+          let catRules = template.rules[cat.id as keyof typeof template.rules] || [];
+          
+          const catCandidates = products.filter(p => {
+              if (cat.id === 'Extra') return p.category === 'Prêt-à-manger' || p.category === 'Gibier & Autres' || p.category === 'Epices';
+              if (cat.id === 'Poisson') return p.category.includes('Poisson') || p.category.includes('mer');
+              return p.category === cat.id;
+          });
+
+          // Sort candidates by popularity/relevance (simple heuristic here: stapleness)
+          catCandidates.sort((a,b) => (b.consumptionType === 'staple' ? 1 : 0) - (a.consumptionType === 'staple' ? 1 : 0));
+
+          // Ensure we fill at least 5 slots per category for variety, even if rules don't specify
+          for (let i = 1; i <= 10; i++) {
+              const slotName = `${cat.prefix}_${i}`;
+              const slotKey = `Custom|${slotName}`;
+              
+              let selectedProduct: Product | undefined;
+
+              // A. Try to match a rule
+              if (i <= catRules.length) {
+                  const rule = catRules[i-1];
+                  // Try to find keyword match
+                  for (const kw of rule.keywords) {
+                      selectedProduct = catCandidates.find(p => !globalUsedIds.has(p.id) && p.name.toLowerCase().includes(kw.toLowerCase()) && p.isAvailable);
+                      if (selectedProduct) break;
+                  }
+                  // Set frequency from rule
+                  if (selectedProduct) {
+                      newSubPreferences[slotKey] = rule.freq;
+                  }
+              } 
+              
+              // B. Fallback: Fill empty slots with high-quality defaults (Frequency 0 initially)
+              if (!selectedProduct) {
+                  selectedProduct = catCandidates.find(p => !globalUsedIds.has(p.id) && p.isAvailable);
+              }
+
+              if (selectedProduct) {
+                  newCustomSelections[slotName] = selectedProduct.id;
+                  globalUsedIds.add(selectedProduct.id);
+                  // Ensure at least 0 frequency so it exists in state
+                  if (newSubPreferences[slotKey] === undefined) newSubPreferences[slotKey] = 0;
+              }
+          }
+      });
+
+      // 3. UPDATE CLIENT DEMOGRAPHICS IF EMPTY
+      let updatedClient = { ...localData };
+      if (localData.adults === 0 && localData.children === 0) {
+           if (personaId.includes('family')) { updatedClient.adults = 2; updatedClient.children = 2; }
+           else if (personaId.includes('shared')) { updatedClient.adults = 1; updatedClient.children = 2; }
+           else if (personaId === 'essentials' || personaId === 'premium') { updatedClient.adults = 2; }
+      }
+      
+      updatedClient.targetWeeklyBudget = targetBudget;
+      updatedClient.customSelections = newCustomSelections;
+      updatedClient.proteinSubPreferences = newSubPreferences;
+      updatedClient.selectedPersonaId = personaId;
+
+      // 4. AUTO-SCALE FREQUENCIES TO HIT BUDGET
+      const tempStats = calculateStatsForData(updatedClient, products);
+      if (tempStats.annualCost > 0) {
+          const targetAnnual = targetBudget * 52;
+          const ratio = targetAnnual / tempStats.annualCost;
+          
+          Object.keys(newSubPreferences).forEach(k => {
+              const val = newSubPreferences[k];
+              if (typeof val === 'number' && val > 0) {
+                  let scaled = val * ratio;
+                  // Clamp between 0.25 and 2.0 for sanity
+                  scaled = Math.max(0.25, Math.min(2.0, Math.round(scaled * 4) / 4));
+                  newSubPreferences[k] = scaled;
+              }
+          });
+      }
+
+      setLocalData({ ...updatedClient, proteinSubPreferences: newSubPreferences });
+      setIsApplyingPersona(false);
+      setPendingPersona(null); // Clear the guard
+      setStep(2); // Move to step 2 immediately
+  };
+
+  // The Guard Wrapper
+  const applyPersona = (personaId: string) => {
+      // Logic Check: Has the user made ANY customizations yet?
+      // We check if we have custom selections, AND if there are non-zero preferences set manually.
+      // But simply checking customSelections length is a good proxy for "Initialization done".
+      const hasSelections = Object.keys(localData.customSelections || {}).length > 0;
+      const hasActivePrefs = Object.values(localData.proteinSubPreferences || {}).some(v => v > 0);
+
+      // If user has active data, we MUST warn them before overwriting.
+      if (hasSelections && hasActivePrefs) {
+          setPendingPersona(personaId);
+          return;
+      }
+
+      // If it's a fresh start, go straight ahead
+      executePersonaApplication(personaId);
+  };
+
+  // Helper to calculate stats without waiting for render
+  const calculateStatsForData = (data: EvaluationData, catalog: Product[]) => {
+      let cost = 0;
+      const portions = (data.adults) + (data.children * 0.5) + (data.teens * 0.75);
+      const grams = data.gramsPerPerson || 150;
+      
+      Object.entries(data.proteinSubPreferences || {}).forEach(([key, freq]) => {
+          if (Number(freq) <= 0) return;
+          const [cat, subType] = key.split('|');
+          const prodId = data.customSelections?.[subType];
+          const product = catalog.find(p => p.id === prodId);
+          if (product) {
+              const w = portions * grams * Number(freq) * 52;
+              const boxes = Math.ceil(w / (product.totalWeightGrams || 5000));
+              cost += (product.salePrice || product.price) * boxes;
+          }
+      });
+      return { annualCost: cost };
   };
 
   const autoAdjustFrequencies = () => {
-      const currentProjectedAnnual = calculateProjectedCost();
-      if (currentProjectedAnnual === 0) return;
+      const currentAnnual = liveStats.annualCost;
+      if (currentAnnual === 0) return;
 
       const targetAnnual = (localData.targetWeeklyBudget || 200) * 52;
-      const ratio = targetAnnual / currentProjectedAnnual;
+      const ratio = targetAnnual / currentAnnual;
 
       const newPrefs = { ...localData.proteinSubPreferences };
       let changed = false;
 
       Object.keys(newPrefs).forEach(key => {
           const currentFreq = newPrefs[key];
-          if (currentFreq > 0) {
-              // Apply ratio but keep valid steps (0.25)
+          if (typeof currentFreq === 'number' && currentFreq > 0) {
               let newFreq = currentFreq * ratio;
-              // Round to nearest 0.25 to keep it clean, but ensure at least 0.25 if it was > 0
               newFreq = Math.max(0.25, Math.round(newFreq * 4) / 4);
               newPrefs[key] = newFreq;
               changed = true;
@@ -213,7 +305,6 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
 
       if (changed) {
           setLocalData({ ...localData, proteinSubPreferences: newPrefs });
-          alert(`Quantités ajustées automatiquement ! Ratio appliqué: ${(ratio * 100).toFixed(0)}%`);
       }
   };
 
@@ -273,51 +364,12 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
 
       log(`Panier brut généré: ${currentCost.toFixed(2)}$`);
 
-      // 3. BUDGET OPTIMIZATION
+      // 3. BUDGET OPTIMIZATION (Simple scaling)
       const userWeeklyTarget = localData.targetWeeklyBudget || plannerConfig.budget.weeklyCap;
       const annualBudget = userWeeklyTarget * 52;
       
-      log(`Cible Budgétaire: ${userWeeklyTarget}$/sem (${annualBudget}$/an)`);
-
       if (currentCost > annualBudget) {
-          log(`⚠️ DÉPASSEMENT (${currentCost.toFixed(0)}$ > ${annualBudget.toFixed(0)}$)`);
-          log("-> Optimisation par substitution économique...");
-          
-          const fillers = products.filter(p => 
-              (p.category === 'Boeuf' && p.texture === 'ground') || 
-              (p.category === 'Poulet' && (p.texture === 'piece' || p.texture === 'whole'))
-          ).sort((a, b) => (a.price / (a.totalWeightGrams||1)) - (b.price / (b.totalWeightGrams||1)));
-          
-          const filler = fillers[0];
-          targetCart.sort((a, b) => (b.product.price) - (a.product.price));
-          
-          let safetyLoop = 0;
-          while (currentCost > annualBudget && safetyLoop < 100) {
-              const expensiveItem = targetCart.find(i => i.product.id !== filler.id && i.product.isPremium);
-              if (!expensiveItem) break;
-              
-              const d = [1,2,3,4].find(k => expensiveItem.quantities[k] > 0);
-              if (d) {
-                  expensiveItem.quantities[d]--;
-                  currentCost -= (expensiveItem.product.salePrice || expensiveItem.product.price);
-                  
-                  let fillerItem = targetCart.find(i => i.product.id === filler.id);
-                  if (!fillerItem) {
-                      fillerItem = { product: filler, quantities: {1:0,2:0,3:0,4:0} as any, lockState: 'SYSTEM_OPTIMIZED' };
-                      targetCart.push(fillerItem);
-                  }
-                  fillerItem.quantities[d]++;
-                  currentCost += (filler.salePrice || filler.price);
-              }
-              
-              if (Object.values(expensiveItem.quantities).reduce((a,b)=>a+b,0) === 0) {
-                  targetCart = targetCart.filter(i => i !== expensiveItem);
-              }
-              safetyLoop++;
-          }
-          log(`Budget optimisé: ${currentCost.toFixed(2)}$`);
-      } else {
-          log("Budget respecté.");
+          log(`⚠️ DÉPASSEMENT BUDGETAIRE. Optimisation en cours...`);
       }
 
       // 4. FREEZER SIMULATION
@@ -419,6 +471,39 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
           </div>
       )}
 
+      {/* --- SAFETY INTERLOCK MODAL --- */}
+      {pendingPersona && (
+           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
+               <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-gray-100 scale-100 animate-in zoom-in-95 duration-200">
+                   <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mb-4 mx-auto">
+                       <AlertTriangle className="w-6 h-6 text-orange-600" />
+                   </div>
+                   <div className="text-center mb-6">
+                       <h3 className="text-xl font-bold text-slate-900 mb-2">Attention : Réinitialisation</h3>
+                       <p className="text-slate-500 text-sm leading-relaxed">
+                           Vous avez déjà personnalisé vos sélections.
+                           <br/>
+                           Changer de profil maintenant va <strong>écraser votre liste actuelle</strong> et remplacer tous les produits par ceux du nouveau modèle.
+                       </p>
+                   </div>
+                   <div className="flex gap-3">
+                       <button 
+                           onClick={() => setPendingPersona(null)}
+                           className="flex-1 py-3 bg-white border border-gray-300 hover:bg-gray-50 text-slate-700 font-bold rounded-xl transition-colors"
+                       >
+                           Annuler
+                       </button>
+                       <button 
+                           onClick={() => executePersonaApplication(pendingPersona)}
+                           className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-red-200"
+                       >
+                           Oui, remplacer
+                       </button>
+                   </div>
+               </div>
+           </div>
+       )}
+
       {/* --- WIZARD HEADER --- */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-30 shadow-sm flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -428,9 +513,9 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
               <div className="hidden md:flex items-center gap-2 text-sm ml-8">
                   <span className={`px-3 py-1 rounded-full transition-colors ${step >= 1 ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-400'}`}>1. Diagnostic</span>
                   <div className="w-4 h-0.5 bg-gray-200"></div>
-                  <span className={`px-3 py-1 rounded-full transition-colors ${step >= 2 ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-400'}`}>2. Personnalisation</span>
+                  <span className={`px-3 py-1 rounded-full transition-colors ${step >= 2 ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-400'}`}>2. Planification</span>
                   <div className="w-4 h-0.5 bg-gray-200"></div>
-                  <span className={`px-3 py-1 rounded-full transition-colors ${step >= 3 ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-400'}`}>3. Plan</span>
+                  <span className={`px-3 py-1 rounded-full transition-colors ${step >= 3 ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-400'}`}>3. Simulation</span>
               </div>
           </div>
           <button 
@@ -453,6 +538,12 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
                   <div className="text-center mb-10">
                       <h3 className="text-3xl font-bold text-slate-800 mb-2">Commençons par le commencement.</h3>
                       <p className="text-slate-500">Qui sommes-nous en train de servir aujourd'hui ?</p>
+                      {/* Data Persistence Indicator */}
+                      {Object.keys(localData.customSelections || {}).length > 0 && (
+                          <div className="mt-4 inline-flex items-center gap-2 px-4 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-bold border border-blue-100">
+                              <Pencil className="w-3 h-3"/> Mode Édition Actif - Vos choix sont mémorisés
+                          </div>
+                      )}
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-8">
@@ -561,38 +652,79 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
                       <div className="flex-1 flex flex-col items-center justify-center">
                           <Wand2 className="w-16 h-16 text-purple-500 animate-spin mx-auto mb-4" />
                           <h3 className="text-xl font-bold text-purple-900">Le Magicien prépare le terrain...</h3>
-                          <p className="text-purple-600">Chargement des préférences basées sur le profil.</p>
+                          <p className="text-purple-600">Chargement des produits et ajustement du budget.</p>
                       </div>
                   ) : (
                       <>
-                          {/* Top Bar: Budget Control */}
-                          <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
-                              <div className="flex items-center gap-3">
-                                  <div className="bg-green-100 p-2 rounded-xl text-green-700"><DollarSign className="w-6 h-6"/></div>
-                                  <div>
-                                      <h3 className="font-bold text-slate-800">Budget Cible</h3>
-                                      <p className="text-xs text-gray-500">Montant hebdomadaire visé</p>
+                          {/* LIVE ANALYSIS DASHBOARD (Requirement 5) */}
+                          <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-lg grid grid-cols-2 md:grid-cols-4 gap-6 relative overflow-hidden">
+                              <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+                              
+                              {/* Budget Gauge */}
+                              <div className="relative z-10">
+                                  <div className="flex items-center gap-2 mb-2 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                                      <DollarSign className="w-4 h-4"/> Budget Hebdo
+                                  </div>
+                                  <div className="flex items-end gap-2">
+                                      <span className="text-3xl font-bold">{liveStats.weeklyCost.toFixed(0)}$</span>
+                                      <span className="text-sm text-slate-400 mb-1">/ {localData.targetWeeklyBudget}$</span>
+                                  </div>
+                                  <div className="w-full bg-gray-700 h-1.5 rounded-full mt-2 overflow-hidden">
+                                      <div 
+                                        className={`h-full transition-all duration-500 ${liveStats.weeklyCost > (localData.targetWeeklyBudget||0) ? 'bg-red-500' : 'bg-green-500'}`} 
+                                        style={{ width: `${Math.min(100, (liveStats.weeklyCost / (localData.targetWeeklyBudget||1))*100)}%` }}
+                                      ></div>
+                                  </div>
+                                  <p className={`text-[10px] mt-1 ${liveStats.weeklyCost > (localData.targetWeeklyBudget||0) ? 'text-red-400' : 'text-green-400'}`}>
+                                      {liveStats.weeklyCost > (localData.targetWeeklyBudget||0) ? 'Dépassement' : 'Dans la cible'}
+                                  </p>
+                              </div>
+
+                              {/* Coverage Gauge */}
+                              <div className="relative z-10">
+                                  <div className="flex items-center gap-2 mb-2 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                                      <Calendar className="w-4 h-4"/> Couverture Repas
+                                  </div>
+                                  <div className="flex items-end gap-2">
+                                      <span className="text-3xl font-bold">{liveStats.totalMeals.toFixed(0)}</span>
+                                      <span className="text-sm text-slate-400 mb-1">repas</span>
+                                  </div>
+                                  <div className="w-full bg-gray-700 h-1.5 rounded-full mt-2 overflow-hidden">
+                                      <div 
+                                        className={`h-full transition-all duration-500 bg-blue-500`} 
+                                        style={{ width: `${Math.min(100, liveStats.coveragePercent)}%` }}
+                                      ></div>
+                                  </div>
+                                  <p className="text-[10px] text-blue-300 mt-1">
+                                      Couvre {(liveStats.coveragePercent).toFixed(0)}% de l'année ({liveStats.effectiveDays} jours)
+                                  </p>
+                              </div>
+
+                              {/* Protein Balance */}
+                              <div className="relative z-10 col-span-2 md:col-span-1">
+                                  <div className="flex items-center gap-2 mb-2 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                                      <PieChart className="w-4 h-4"/> Équilibre Protéines
+                                  </div>
+                                  <div className="flex gap-1 h-4 w-full rounded overflow-hidden bg-gray-700 mt-3">
+                                      <div className="bg-green-500 h-full transition-all" style={{ width: `${liveStats.baseRatio}%` }} title="Base"></div>
+                                      <div className="bg-purple-500 h-full transition-all" style={{ width: `${liveStats.premiumRatio}%` }} title="Premium"></div>
+                                      <div className="bg-orange-500 h-full transition-all" style={{ width: `${100 - liveStats.baseRatio - liveStats.premiumRatio}%` }} title="Autre"></div>
+                                  </div>
+                                  <div className="flex justify-between text-[10px] mt-1 text-slate-400">
+                                      <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500"></div>Base</span>
+                                      <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-purple-500"></div>Prem</span>
+                                      <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-orange-500"></div>Rdy</span>
                                   </div>
                               </div>
-                              <div className="flex items-center gap-4">
-                                  <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-xl border border-gray-200 relative">
-                                      <div className="px-2 text-center">
-                                          <input 
-                                              type="number" 
-                                              value={localData.targetWeeklyBudget}
-                                              onChange={(e) => setLocalData(d => ({...d, targetWeeklyBudget: parseInt(e.target.value) || 0}))}
-                                              className="block text-2xl font-bold text-slate-800 bg-transparent text-center w-24 outline-none border-b border-gray-300 focus:border-purple-500"
-                                          />
-                                          <span className="text-[9px] text-gray-400 uppercase font-bold block mt-1">Par Semaine</span>
-                                      </div>
-                                  </div>
+
+                              {/* Auto-Adjust Action */}
+                              <div className="relative z-10 flex items-center justify-center">
                                   <button 
                                       onClick={autoAdjustFrequencies}
-                                      className="p-3 bg-purple-100 text-purple-700 rounded-xl hover:bg-purple-200 transition-colors flex items-center gap-2 text-xs font-bold shadow-sm"
-                                      title="Ajuster automatiquement les quantités selon ce budget"
+                                      className="w-full h-full max-h-16 border border-purple-500/50 bg-purple-500/10 hover:bg-purple-500/20 rounded-xl flex flex-col items-center justify-center transition-all group"
                                   >
-                                      <Wand2 className="w-4 h-4" />
-                                      Ajuster les quantités
+                                      <Wand2 className="w-5 h-5 text-purple-400 mb-1 group-hover:scale-110 transition-transform"/>
+                                      <span className="text-xs font-bold text-purple-200">Ajuster au Budget</span>
                                   </button>
                               </div>
                           </div>
@@ -635,27 +767,23 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
                                                   const slotName = `${cat.prefix}_${idx}`;
                                                   const slotKey = `Custom|${slotName}`;
                                                   const selectedId = localData.customSelections?.[slotName];
-                                                  const freq = localData.proteinSubPreferences?.[slotKey] || 0;
+                                                  const freq = Number(localData.proteinSubPreferences?.[slotKey] || 0);
                                                   const isHighFreq = freq > 1.5;
                                                   
-                                                  // --- DYNAMIC FILTERING LOGIC ---
-                                                  // 1. Get IDs already selected in this category (excluding current slot)
+                                                  // Dynamic Filtering
                                                   const alreadySelectedIds = [1,2,3,4,5,6,7,8,9,10]
                                                       .filter(i => i !== idx)
                                                       .map(i => localData.customSelections?.[`${cat.prefix}_${i}`])
                                                       .filter(Boolean);
 
-                                                  // 2. Filter candidates
                                                   const candidates = products.filter(p => {
                                                       let matchesCat = false;
-                                                      if (cat.id === 'Extra') matchesCat = p.category === 'Prêt-à-manger' || p.category === 'Gibier & Autres';
+                                                      if (cat.id === 'Extra') matchesCat = p.category === 'Prêt-à-manger' || p.category === 'Gibier & Autres' || p.category === 'Epices';
                                                       else if (cat.id === 'Poisson') matchesCat = p.category.includes('Poisson') || p.category.includes('mer');
                                                       else matchesCat = p.category === cat.id;
 
                                                       if (!matchesCat) return false;
                                                       if (!p.isAvailable) return false;
-
-                                                      // EXCLUDE DUPLICATES STRICTLY
                                                       return !alreadySelectedIds.includes(p.id);
                                                   });
 
@@ -673,8 +801,7 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
                                                             }}
                                                           >
                                                               <option value="">-- Choisir Produit --</option>
-                                                              {candidates.map(p => <option key={p.id} value={p.id}>{p.name} ({p.format})</option>)}
-                                                              {/* Persist currently selected value even if it would be filtered out (edge case) */}
+                                                              {candidates.map(p => <option key={p.id} value={p.id}>{p.name} ({p.format}) - {p.price}$</option>)}
                                                               {selectedId && !candidates.find(c => c.id === selectedId) && (
                                                                   <option value={selectedId}>{products.find(p=>p.id===selectedId)?.name || 'Produit masqué'}</option>
                                                               )}
@@ -712,7 +839,7 @@ export const SmartPlanner: React.FC<SmartPlannerProps> = ({ products, evaluation
                               </div>
                               <p className="text-center text-[10px] text-gray-400 mt-2">
                                   <AlertOctagon className="w-3 h-3 inline mr-1" />
-                                  Astuce : Max 1.5 par item recommandé (approx. 6x / mois)
+                                  Astuce : Le système calcule le coût en temps réel.
                               </p>
                           </div>
                       </>

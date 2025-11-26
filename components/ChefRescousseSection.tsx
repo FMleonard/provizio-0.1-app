@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { ChefHat, Sparkles, Clock, BarChart, Utensils, ArrowRight, Loader, ShoppingBag, BookOpen } from 'lucide-react';
+import { ChefHat, Sparkles, Clock, BarChart, Utensils, ArrowRight, Loader, ShoppingBag, BookOpen, WifiOff } from 'lucide-react';
 import { useCart } from '../contexts/StoreContext';
 import { Product } from '../types';
 import { GoogleGenAI } from "@google/genai";
@@ -18,6 +19,7 @@ export const ChefRescousseSection: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   // Filter out items with 0 quantity effectively, get unique products
   const availableIngredients = cart.filter(item => {
@@ -25,10 +27,53 @@ export const ChefRescousseSection: React.FC = () => {
       return totalQty > 0;
   }).map(item => item.product);
 
+  const getFallbackRecipes = (productName: string): Recipe[] => [
+    {
+      title: `Poêlée simple de ${productName}`,
+      time: "20 min",
+      difficulty: "Facile",
+      calories: "450 kcal",
+      ingredients: [productName, "Huile d'olive", "Ail", "Sel & Poivre", "Herbes de provence"],
+      steps: [
+        `Coupez le ${productName} en morceaux uniformes.`,
+        "Faites chauffer la poêle à feu moyen-vif avec l'huile.",
+        "Saisissez le tout pendant 5-7 minutes jusqu'à coloration.",
+        "Assaisonnez généreusement et servez immédiatement."
+      ]
+    },
+    {
+      title: `${productName} Rôti aux Légumes`,
+      time: "45 min",
+      difficulty: "Moyen",
+      calories: "520 kcal",
+      ingredients: [productName, "Pommes de terre", "Carottes", "Oignons", "Bouillon"],
+      steps: [
+        "Préchauffez le four à 375°F (190°C).",
+        `Disposez le ${productName} et les légumes coupés dans un plat allant au four.`,
+        "Arrosez de bouillon, ajoutez les herbes et couvrez de papier alu.",
+        "Cuisez 35 minutes, puis 10 minutes à découvert pour dorer."
+      ]
+    },
+    {
+      title: `Mijoté express de ${productName}`,
+      time: "30 min",
+      difficulty: "Facile",
+      calories: "400 kcal",
+      ingredients: [productName, "Tomates en dés", "Oignons", "Céleri", "Épices Italiennes"],
+      steps: [
+        "Faites revenir les oignons et le céleri dans un peu de beurre.",
+        `Ajoutez le ${productName} et faites dorer légèrement sur toutes les faces.`,
+        "Incorporez les tomates et laissez mijoter à feu doux 20 minutes.",
+        "Servez chaud sur du riz ou des pâtes."
+      ]
+    }
+  ];
+
   const generateRecipes = async (product: Product) => {
     setSelectedProduct(product);
     setRecipes(null);
     setLoading(true);
+    setIsOfflineMode(false);
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -62,8 +107,12 @@ export const ChefRescousseSection: React.FC = () => {
       const data = JSON.parse(result.text || "[]");
       setRecipes(data);
     } catch (error) {
-      console.error("Recipe generation failed", error);
-      alert("Le chef est débordé (Erreur IA). Veuillez réessayer.");
+      console.warn("API Quota/Error -> Switching to Offline Fallback", error);
+      setIsOfflineMode(true);
+      // Simulate network delay for realism even in fallback
+      setTimeout(() => {
+        setRecipes(getFallbackRecipes(product.name));
+      }, 1000);
     } finally {
       setLoading(false);
     }
@@ -148,9 +197,17 @@ export const ChefRescousseSection: React.FC = () => {
           ) : recipes ? (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-8">
               <div className="flex justify-between items-end">
-                 <h3 className="text-2xl font-bold text-slate-800">
-                    Recettes pour <span className="text-orange-600 underline decoration-orange-300 underline-offset-4">{selectedProduct.name}</span>
-                 </h3>
+                 <div>
+                     <h3 className="text-2xl font-bold text-slate-800">
+                        Recettes pour <span className="text-orange-600 underline decoration-orange-300 underline-offset-4">{selectedProduct.name}</span>
+                     </h3>
+                     {isOfflineMode && (
+                        <div className="flex items-center gap-2 mt-2 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-lg border border-orange-100 w-fit">
+                            <WifiOff className="w-3 h-3" />
+                            <span>Mode Hors-Ligne (Recettes Génériques)</span>
+                        </div>
+                     )}
+                 </div>
                  <span className="text-xs bg-white border border-gray-200 px-3 py-1 rounded-full font-bold text-slate-500">3 Suggestions</span>
               </div>
               
