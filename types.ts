@@ -132,6 +132,7 @@ export interface EvaluationData {
   
   // Tracks the active AI Template (Package)
   selectedPersonaId?: string;
+  targetWeeklyBudget?: number; // NEW: The editable budget goal for the planner
   
   // --- TEMPORAL PROTOCOL ---
   userIANATimeZone?: string; // P2: Context Variable (e.g., 'America/Chicago')

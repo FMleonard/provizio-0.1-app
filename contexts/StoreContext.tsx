@@ -1,5 +1,4 @@
 
-
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { Product, CartItem, ClientInfo, Settings, EvaluationData, KnowledgeSource, AppConfig, LockState, PlannerConfig } from '../types';
 import { PRODUCT_CATALOG, detectSmartCategory, DEFAULT_APP_CONFIGS, DEFAULT_PLANNER_CONFIG } from '../constants';
@@ -265,7 +264,8 @@ export const ClientProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           proteinSubPreferences: {}, 
           customSelections: initialCustomSelections,
           // P2: Context Variable Init
-          userIANATimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+          userIANATimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          targetWeeklyBudget: 125 // Default start
       };
   });
 

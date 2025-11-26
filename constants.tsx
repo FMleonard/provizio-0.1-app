@@ -1,9 +1,5 @@
 
-
-
-
-
-import { Percent, Beef, Drumstick, ChefHat, Fish, ScrollText, DollarSign, Utensils, Flame, PiggyBank, Dumbbell, Zap, Box, UserPlus } from 'lucide-react';
+import { Percent, Beef, Drumstick, ChefHat, Fish, ScrollText, DollarSign, Utensils, Flame, PiggyBank, Dumbbell, Zap, Box, UserPlus, IceCream, Soup, Droplet, Cookie, Salad } from 'lucide-react';
 import { HalalIcon } from './components/HalalIcon';
 import { AppConfig, PlannerConfig } from './types';
 
@@ -86,12 +82,12 @@ export const DEFAULT_PLANNER_CONFIG: PlannerConfig = {
     name: 'Factory Default',
     status: 'live',
     timestamp: new Date().toISOString(),
-    budget: { weeklyCap: 125, maxPricePerKg: 28 },
-    custody: { childFactor: 0.5, teenFactor: 0.75 },
+    budget: { weeklyCap: 250, maxPricePerKg: 35 },
+    custody: { childFactor: 0.5, teenFactor: 0.85 },
     essentials: { maxItems: 5, excludePremium: true },
     vip: { premiumTarget: 104, sortingWeight: 2.0 },
     condo: { overflowThreshold: 1.0, packDensity: 25 },
-    variety: { maxRedMeatPercentage: 0.40, minFishPercentage: 0.10, diversityPenaltyWeight: 5, forceVarietyInjection: true },
+    variety: { maxRedMeatPercentage: 0.40, minFishPercentage: 0.15, diversityPenaltyWeight: 5, forceVarietyInjection: true },
     timeZoneProtocol: {
         storageStandard: 'UTC',
         contextVariable: 'User_IANA_TimeZone',
@@ -106,15 +102,15 @@ export const AMQ_KNOWLEDGE_BASE = {
         {
             id: 'single',
             label: 'Personne Seule',
-            proteinPerSupper: 115, // 115g per supper
+            proteinPerSupper: 125, 
             description: "Congélateur domestique suffisant.",
-            recommendedFreq: 1, // Annual order implies small freezer logic or single batch
+            recommendedFreq: 1, 
             icon: 'User'
         },
         {
             id: 'couple',
             label: 'Couple',
-            proteinPerSupper: 230, // 230g per supper
+            proteinPerSupper: 250, 
             description: "Commandes bimensuelles ou annuelles recommandées.",
             recommendedFreq: 2,
             icon: 'Users'
@@ -122,7 +118,7 @@ export const AMQ_KNOWLEDGE_BASE = {
         {
             id: 'family_small',
             label: 'Famille (2 enfants <12)',
-            proteinPerSupper: 390, // 390g per supper
+            proteinPerSupper: 450, 
             description: "Optimisation budget et gaspillage (-48%).",
             recommendedFreq: 4,
             icon: 'Baby'
@@ -130,7 +126,7 @@ export const AMQ_KNOWLEDGE_BASE = {
         {
             id: 'family_teens',
             label: 'Famille (2 ados)',
-            proteinPerSupper: 520, // Extrapolated from Chart Page 8
+            proteinPerSupper: 600, 
             description: "Volume élevé, nécessite congélateur coffre.",
             recommendedFreq: 4,
             icon: 'UserPlus'
@@ -164,14 +160,28 @@ export const CATEGORIES = [
   { id: 'Poisson/Fruits de mer', label: 'Poissons & Mer', icon: Fish },
   { id: 'Gibier & Autres', label: 'Gibier & Autres', icon: ScrollText },
   { id: 'Prêt-à-manger', label: 'Prêt-à-manger', icon: DollarSign },
+  { id: 'Entrée', label: 'Entrées', icon: Salad },
+  { id: 'Dessert', label: 'Desserts', icon: Cookie },
+  { id: 'Sauce', label: 'Sauces', icon: Droplet },
   { id: 'Epices', label: 'Épices & Autres', icon: Utensils },
 ];
 
 export const detectSmartCategory = (name: string, currentCategory: string = ''): string => {
     const n = name.toLowerCase();
     
+    // 0. Nouvelles catégories prioritaires
+    if (n.includes('gâteau') || n.includes('tarte') || n.includes('biscuit') || n.includes('dessert') || n.includes('chocolat')) {
+        return 'Dessert';
+    }
+    if ((n.includes('sauce') || n.includes('marinade')) && !n.includes('pâtes') && !n.includes('viande')) {
+        return 'Sauce';
+    }
+    if (n.includes('fondue parmesan') || n.includes('bâtonnet fromage') || n.includes('calmar') || n.includes('aile') || n.includes('entrée') || n.includes('boulette')) {
+        return 'Entrée';
+    }
+
     // 1. Épices & Assaisonnements (Requested Priority)
-    if (n.includes('épice') || n.includes('epice') || n.includes('rub') || n.includes('sauce') || n.includes('assaisonnement') || n.includes('marinade') || n.includes('sel ') || n.includes('poivre')) {
+    if (n.includes('épice') || n.includes('epice') || n.includes('rub') || n.includes('assaisonnement') || n.includes('sel ') || n.includes('poivre')) {
         return 'Epices';
     }
 
@@ -186,8 +196,6 @@ export const detectSmartCategory = (name: string, currentCategory: string = ''):
     }
 
     // 4. Specific Pork keywords (Bacon, Saucisse -> Porc)
-    // Note: Saucisse is usually Porc, unless specific meat is mentioned. Since we checked Poultry above, "Saucisse de poulet" should be caught there if order matters. 
-    // However, simplest rule "contains saucisse -> Porc" works for 90% of cases in this catalog.
     if (n.includes('porc') || n.includes('pork') || n.includes('bacon') || n.includes('saucisse') || n.includes('jambon') || n.includes('cote levée') || n.includes('côte levée') || n.includes('flanc')) {
         return 'Porc';
     }
@@ -216,36 +224,44 @@ export const detectSmartCategory = (name: string, currentCategory: string = ''):
     if (c.includes('gibier')) return 'Gibier & Autres';
     if (c.includes('prêt')) return 'Prêt-à-manger';
     if (c.includes('epice')) return 'Epices';
+    if (c.includes('dessert')) return 'Dessert';
+    if (c.includes('entree') || c.includes('entrée')) return 'Entrée';
+    if (c.includes('sauce')) return 'Sauce';
 
     return currentCategory || 'Autre';
 };
 
 // --- PERSONA TEMPLATES (Package Scenarios) ---
-// These define the "Default State" for specific user archetypes
+// Mise à jour des budgets pour 2025 et dispersion des items pour éviter les répétitions
 export const PERSONA_TEMPLATES = [
     {
         id: 'family_budget',
         label: 'Famille Budget (4p)',
-        description: 'Optimisé pour ~100$/sem. Gros formats, mijotés.',
+        description: 'Optimisé pour ~275$/sem. Gros formats, mijotés.',
         iconName: 'PiggyBank',
         color: 'green',
+        defaultBudget: 275,
         rules: {
             'Boeuf': [
-                { keywords: ['haché', 'ground'], freq: 2 },
-                { keywords: ['cube', 'ragoût', 'stew'], freq: 1 },
-                { keywords: ['palette', 'rôti'], freq: 0.5 },
+                { keywords: ['haché', 'ground'], freq: 1.0 }, // Max 1.0 au lieu de 1.5
+                { keywords: ['cube', 'ragoût', 'stew'], freq: 0.5 },
+                { keywords: ['palette', 'rôti'], freq: 0.25 },
+                { keywords: ['burger'], freq: 0.25 },
             ],
             'Poulet': [
-                { keywords: ['entier', 'whole'], freq: 1 },
-                { keywords: ['haut de cuisse', 'thigh'], freq: 2 },
-                { keywords: ['pilon', 'drumstick'], freq: 1 },
+                { keywords: ['entier', 'whole'], freq: 0.5 },
+                { keywords: ['haut de cuisse', 'thigh'], freq: 1.0 },
+                { keywords: ['pilon', 'drumstick'], freq: 0.5 },
+                { keywords: ['haché'], freq: 0.5 },
             ],
             'Porc': [
-                { keywords: ['longe', 'rôti'], freq: 0.5 },
-                { keywords: ['saucisse'], freq: 1 },
+                { keywords: ['longe', 'rôti'], freq: 0.25 },
+                { keywords: ['saucisse'], freq: 0.5 },
+                { keywords: ['haché'], freq: 0.5 },
+                { keywords: ['côtelette'], freq: 0.5 },
             ],
             'Extra': [
-                { keywords: ['pâté'], freq: 1 },
+                { keywords: ['pâté'], freq: 0.25 },
             ]
         }
     },
@@ -255,20 +271,26 @@ export const PERSONA_TEMPLATES = [
         description: 'Flexible. Plats enfants et repas rapides.',
         iconName: 'UserPlus',
         color: 'orange',
+        defaultBudget: 225,
         rules: {
             'Boeuf': [
-                { keywords: ['burger', 'haché'], freq: 2 },
-                { keywords: ['minute', 'tournedos'], freq: 1 },
+                { keywords: ['burger'], freq: 1.0 },
+                { keywords: ['haché'], freq: 0.5 },
+                { keywords: ['minute', 'tournedos'], freq: 0.5 },
             ],
             'Poulet': [
-                { keywords: ['croquette', 'nugget'], freq: 2 },
-                { keywords: ['brochette', 'souvlaki'], freq: 1 },
-                { keywords: ['pané'], freq: 1 },
+                { keywords: ['croquette', 'nugget'], freq: 1.0 },
+                { keywords: ['brochette', 'souvlaki'], freq: 0.5 },
+                { keywords: ['pané', 'lanière'], freq: 0.5 },
+                { keywords: ['pilon'], freq: 0.5 },
             ],
             'Extra': [
-                { keywords: ['pâté'], freq: 1 },
-                { keywords: ['sauce'], freq: 1 },
-                { keywords: ['lasagne'], freq: 1 },
+                { keywords: ['pâté'], freq: 0.25 },
+                { keywords: ['sauce'], freq: 0.5 },
+                { keywords: ['lasagne', 'pizza'], freq: 0.5 },
+            ],
+            'Dessert': [
+                { keywords: ['gâteau'], freq: 0.25 }
             ]
         }
     },
@@ -278,15 +300,20 @@ export const PERSONA_TEMPLATES = [
         description: '5 repas simples par semaine. Poulet, Bœuf, Porc.',
         iconName: 'Zap',
         color: 'blue',
+        defaultBudget: 200,
         rules: {
             'Boeuf': [
-                { keywords: ['haché', 'ground'], freq: 2 },
+                { keywords: ['haché', 'ground'], freq: 1.0 },
+                { keywords: ['bavette'], freq: 0.25 },
+                { keywords: ['cube'], freq: 0.25 },
             ],
             'Poulet': [
-                { keywords: ['poitrine', 'breast'], freq: 2 },
+                { keywords: ['poitrine', 'breast'], freq: 1.0 },
+                { keywords: ['pilon'], freq: 0.5 },
             ],
             'Porc': [
-                { keywords: ['côtelette', 'chop'], freq: 1 },
+                { keywords: ['côtelette', 'chop'], freq: 0.5 },
+                { keywords: ['filet'], freq: 0.5 },
             ]
         }
     },
@@ -296,20 +323,27 @@ export const PERSONA_TEMPLATES = [
         description: 'Upgrade. Steaks, Fruits de mer, Veau, Canard.',
         iconName: 'Flame',
         color: 'purple',
+        defaultBudget: 400,
         rules: {
             'Boeuf': [
-                { keywords: ['filet mignon'], freq: 1 },
-                { keywords: ['ribeye', 'faux-filet'], freq: 1 },
+                { keywords: ['filet mignon'], freq: 0.5 },
+                { keywords: ['ribeye', 'faux-filet'], freq: 0.5 },
                 { keywords: ['bavette'], freq: 0.5 },
+                { keywords: ['tomahawk', 't-bone'], freq: 0.25 },
             ],
             'Poisson': [
-                { keywords: ['pétoncle'], freq: 1 },
+                { keywords: ['pétoncle'], freq: 0.25 },
                 { keywords: ['homard', 'crevette'], freq: 0.5 },
-                { keywords: ['saumon'], freq: 1 },
+                { keywords: ['saumon'], freq: 0.5 },
+                { keywords: ['morue', 'aiglefin'], freq: 0.25 },
             ],
              'Gibier & Autres': [
-                { keywords: ['veau'], freq: 0.5 },
-                { keywords: ['canard'], freq: 0.5 }
+                { keywords: ['veau'], freq: 0.25 },
+                { keywords: ['canard'], freq: 0.25 },
+                { keywords: ['agneau'], freq: 0.25 }
+            ],
+            'Entrée': [
+                { keywords: ['fondue'], freq: 0.25 }
             ]
         }
     },
@@ -319,94 +353,26 @@ export const PERSONA_TEMPLATES = [
         description: 'Compact. Emballages plats sous-vide.',
         iconName: 'Box',
         color: 'yellow',
+        defaultBudget: 250,
         rules: {
             'Boeuf': [
-                { keywords: ['bavette'], freq: 1 },
-                { keywords: ['tournedos'], freq: 1 },
-                { keywords: ['steak'], freq: 1 },
+                { keywords: ['bavette'], freq: 0.5 },
+                { keywords: ['tournedos'], freq: 0.5 },
+                { keywords: ['steak'], freq: 0.5 },
             ],
             'Poulet': [
-                { keywords: ['poitrine', 'breast'], freq: 2 },
-                { keywords: ['tournedos'], freq: 1 },
+                { keywords: ['poitrine', 'breast'], freq: 1.0 },
+                { keywords: ['tournedos'], freq: 0.5 },
             ],
             'Poisson': [
-                { keywords: ['filet'], freq: 2 },
+                { keywords: ['filet'], freq: 1.0 },
             ],
             'Porc': [
-                { keywords: ['saucisse'], freq: 1 },
-                { keywords: ['bacon'], freq: 0.5 },
+                { keywords: ['saucisse'], freq: 0.5 },
+                { keywords: ['bacon'], freq: 0.25 },
             ]
         }
     }
 ];
 
-export const PRODUCT_CATALOG = [
-  // --- BŒUF (Base & Premium) ---
-  {"id": "b_821397", "sku": "821397", "name": "Bœuf haché extra maigre", "format": "10 X 454G", "price": 89.90, "category": "Boeuf", "unitCount": 10, "totalWeightGrams": 4540, "consumptionType": "staple", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "ground", "managementCategory": "base"},
-  {"id": "b_1534S", "sku": "1534-S", "name": "Bœuf Haché Maigre", "format": "10 X 454G", "price": 83.00, "category": "Boeuf", "unitCount": 10, "totalWeightGrams": 4540, "consumptionType": "staple", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "ground", "managementCategory": "base"},
-  {"id": "b_811625", "sku": "811625", "name": "Steak Minute AAA", "format": "24 X 110G", "price": 150.90, "category": "Boeuf", "unitCount": 24, "totalWeightGrams": 2640, "consumptionType": "quick", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "steak", "managementCategory": "base"},
-  {"id": "b_821343", "sku": "821343", "name": "Cubes de boeuf à ragoût", "format": "8 X 454G", "price": 146.70, "category": "Boeuf", "unitCount": 8, "totalWeightGrams": 3632, "consumptionType": "staple", "isAvailable": true, "seasonality": "winter", "proteinType": "Viande Rouge", "texture": "cube", "managementCategory": "base"},
-  {"id": "b_fondue", "sku": "821999", "name": "Cubes pour Fondue Chinoise", "format": "10 X 350G", "price": 155.00, "category": "Boeuf", "unitCount": 10, "totalWeightGrams": 3500, "consumptionType": "quick", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "slice", "managementCategory": "medium"},
-  {"id": "b_811930", "sku": "811930", "name": "Tournedos de boeuf", "format": "24 X 110G", "price": 186.90, "category": "Boeuf", "unitCount": 24, "totalWeightGrams": 2640, "consumptionType": "quick", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "steak", "managementCategory": "base"},
-  {"id": "b_821416", "sku": "821416", "name": "Bavette de boeuf marinée", "format": "12 X 224G", "price": 274.70, "category": "Boeuf", "unitCount": 12, "totalWeightGrams": 2688, "consumptionType": "quick", "isAvailable": true, "isPremium": true, "proteinType": "Viande Rouge", "texture": "steak", "managementCategory": "premium"},
-  {"id": "b_821421", "sku": "821421", "name": "Filet mignon AAA+ 6 oz", "format": "12 X 170G", "price": 357.90, "category": "Boeuf", "unitCount": 12, "totalWeightGrams": 2040, "consumptionType": "quick", "isAvailable": true, "isPremium": true, "proteinType": "Viande Rouge", "texture": "steak", "managementCategory": "premium"},
-  {"id": "b_ribeye", "sku": "821888", "name": "Faux-Filet (Ribeye) AAA", "format": "10 X 340G", "price": 310.00, "category": "Boeuf", "unitCount": 10, "totalWeightGrams": 3400, "consumptionType": "quick", "isAvailable": true, "isPremium": true, "proteinType": "Viande Rouge", "texture": "steak", "managementCategory": "premium"},
-  {"id": "b_tbone", "sku": "821777", "name": "T-Bone Steak AAA", "format": "8 X 454G", "price": 295.00, "category": "Boeuf", "unitCount": 8, "totalWeightGrams": 3632, "consumptionType": "quick", "isAvailable": true, "isPremium": true, "proteinType": "Viande Rouge", "texture": "steak", "managementCategory": "premium"},
-  {"id": "b_821368", "sku": "821368", "name": "Rosette de boeuf", "format": "2 kg", "price": 91.30, "category": "Boeuf", "totalWeightGrams": 2000, "consumptionType": "roast", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "roast", "managementCategory": "base"},
-  {"id": "b_821425", "sku": "821425", "name": "Roti d'Épaule de Boeuf", "format": "3 X 1KG", "price": 120.80, "category": "Boeuf", "unitCount": 3, "totalWeightGrams": 3000, "consumptionType": "roast", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "roast", "managementCategory": "base"},
-  {"id": "b_150322", "sku": "150322", "name": "Smoked Meat", "format": "22 X 125g", "price": 238.60, "category": "Boeuf", "unitCount": 22, "totalWeightGrams": 2750, "consumptionType": "quick", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "deli", "managementCategory": "base"},
-  {"id": "b_roti_palette", "sku": "B050", "name": "Rôti de palette désossé", "format": "4 x 800G", "price": 98.00, "category": "Boeuf", "unitCount": 4, "totalWeightGrams": 3200, "consumptionType": "slow", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "roast", "managementCategory": "base"},
-  {"id": "b_steak_francais", "sku": "B051", "name": "Steak Français (Intérieur de ronde)", "format": "16 x 170G", "price": 145.00, "category": "Boeuf", "unitCount": 16, "totalWeightGrams": 2720, "consumptionType": "quick", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "steak", "managementCategory": "base"},
-  {"id": "b_boulettes", "sku": "B052", "name": "Boulettes de bœuf italiennes", "format": "2kg (approx 40)", "price": 65.00, "category": "Boeuf", "unitCount": 40, "totalWeightGrams": 2000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "prepared", "managementCategory": "base"},
-  {"id": "b_laniere_bavette", "sku": "B053", "name": "Lanières de Bavette marinées", "format": "10 x 200G", "price": 185.00, "category": "Boeuf", "unitCount": 10, "totalWeightGrams": 2000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "slice", "managementCategory": "premium"},
-  {"id": "b_cubes_brochette", "sku": "B054", "name": "Cubes Bœuf à Brochette", "format": "8 x 454G", "price": 165.00, "category": "Boeuf", "unitCount": 8, "totalWeightGrams": 3632, "consumptionType": "quick", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "cube", "managementCategory": "medium"},
-
-  // --- POULET (Base & Easy) ---
-  {"id": "p_QC10608", "sku": "QC10608", "name": "Haut Cuisse poulet désossé", "format": "10-14 (3,6 kg)", "price": 127.00, "category": "Poulet", "unitCount": 12, "totalWeightGrams": 3600, "consumptionType": "staple", "isAvailable": true, "proteinType": "Volaille", "texture": "piece", "managementCategory": "base"},
-  {"id": "p_QC10114", "sku": "QC10114", "name": "Poitrines poulet désossées", "format": "9-12 (3.2KG)", "price": 109.00, "category": "Poulet", "unitCount": 10, "totalWeightGrams": 3200, "consumptionType": "staple", "isAvailable": true, "proteinType": "Volaille", "texture": "breast", "managementCategory": "base"},
-  {"id": "p_hache", "sku": "QC10999", "name": "Poulet Haché Maigre", "format": "10 X 454G", "price": 95.00, "category": "Poulet", "unitCount": 10, "totalWeightGrams": 4540, "consumptionType": "staple", "isAvailable": true, "proteinType": "Volaille", "texture": "ground", "managementCategory": "base"},
-  {"id": "p_QC11009", "sku": "QC11009", "name": "Poulet entier 1,8 kg", "format": "1,8 Kg", "price": 17.40, "category": "Poulet", "unitCount": 1, "totalWeightGrams": 1800, "consumptionType": "roast", "isAvailable": true, "proteinType": "Volaille", "texture": "whole", "managementCategory": "base"},
-  {"id": "p_811425", "sku": "811425", "name": "Brochettes poulet souvlaki", "format": "18 X 110G", "price": 133.70, "category": "Poulet", "unitCount": 18, "totalWeightGrams": 1980, "consumptionType": "quick", "isAvailable": true, "proteinType": "Volaille", "texture": "kebab", "managementCategory": "base"},
-  {"id": "p_821369", "sku": "821369", "name": "Ailes de poulet BBQ", "format": "2 X 1KG", "price": 76.90, "category": "Poulet", "unitCount": 2, "totalWeightGrams": 2000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Volaille", "texture": "bone-in", "managementCategory": "base"},
-  {"id": "p_croq", "sku": "821555", "name": "Croquettes de Poulet (Vraie viande)", "format": "4 X 1KG", "price": 85.00, "category": "Poulet", "unitCount": 4, "totalWeightGrams": 4000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Volaille", "texture": "prepared", "managementCategory": "base"},
-  {"id": "p_gen", "sku": "821666", "name": "Poulet Général Tao", "format": "4 X 1KG", "price": 92.00, "category": "Poulet", "unitCount": 4, "totalWeightGrams": 4000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Volaille", "texture": "prepared", "managementCategory": "base"},
-  {"id": "p_crapaudine", "sku": "P050", "name": "Poulet en Crapaudine (Portugais)", "format": "2 x 1.2kg", "price": 42.00, "category": "Poulet", "unitCount": 2, "totalWeightGrams": 2400, "consumptionType": "roast", "isAvailable": true, "proteinType": "Volaille", "texture": "whole", "managementCategory": "medium"},
-  {"id": "p_lanieres", "sku": "P051", "name": "Lanières de poulet panées", "format": "2kg", "price": 78.00, "category": "Poulet", "unitCount": 1, "totalWeightGrams": 2000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Volaille", "texture": "prepared", "managementCategory": "base"},
-  {"id": "p_burger_poulet", "sku": "P052", "name": "Burger de poulet grillé", "format": "12 x 140g", "price": 65.00, "category": "Poulet", "unitCount": 12, "totalWeightGrams": 1680, "consumptionType": "quick", "isAvailable": true, "proteinType": "Volaille", "texture": "prepared", "managementCategory": "base"},
-  {"id": "p_cubes", "sku": "P053", "name": "Cubes de poulet (Poitrine)", "format": "5 x 500g", "price": 85.00, "category": "Poulet", "unitCount": 5, "totalWeightGrams": 2500, "consumptionType": "staple", "isAvailable": true, "proteinType": "Volaille", "texture": "cube", "managementCategory": "base"},
-
-  // --- PORC (Everyday) ---
-  {"id": "po_151396", "sku": "151396", "name": "Porc haché 85%", "format": "10 X 500G", "price": 80.50, "category": "Porc", "unitCount": 10, "totalWeightGrams": 5000, "consumptionType": "staple", "isAvailable": true, "proteinType": "Porc", "texture": "ground", "managementCategory": "base"},
-  {"id": "po_filet", "sku": "811222", "name": "Filet de Porc (Tenderloin)", "format": "4 X 1KG", "price": 88.00, "category": "Porc", "unitCount": 8, "totalWeightGrams": 4000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Porc", "texture": "piece", "managementCategory": "base"},
-  {"id": "po_811975", "sku": "811975", "name": "Rôti de porc longe", "format": "4 X 908G", "price": 51.80, "category": "Porc", "unitCount": 4, "totalWeightGrams": 3632, "consumptionType": "roast", "isAvailable": true, "proteinType": "Porc", "texture": "roast", "managementCategory": "base"},
-  {"id": "po_821524", "sku": "821524", "name": "Bacon artisanal", "format": "6 X 500g", "price": 76.20, "category": "Porc", "unitCount": 6, "totalWeightGrams": 3000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Porc", "texture": "slice", "managementCategory": "base"},
-  {"id": "po_821252", "sku": "821252", "name": "Côte de porc bbq", "format": "12 x 250g", "price": 101.40, "category": "Porc", "unitCount": 12, "totalWeightGrams": 3000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Porc", "texture": "chop", "managementCategory": "base"},
-  {"id": "po_saucisse_it", "sku": "821111", "name": "Saucisses Italiennes Douces", "format": "5kg (VRAC)", "price": 65.00, "category": "Porc", "totalWeightGrams": 5000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Porc", "texture": "sausage", "managementCategory": "base"},
-  {"id": "po_saucisse_dj", "sku": "821112", "name": "Saucisses Déjeuner Érable", "format": "5kg (VRAC)", "price": 68.00, "category": "Porc", "totalWeightGrams": 5000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Porc", "texture": "sausage", "managementCategory": "base"},
-  {"id": "po_cotelette_desosse", "sku": "PO050", "name": "Côtelettes de porc désossées", "format": "20 x 140g", "price": 75.00, "category": "Porc", "unitCount": 20, "totalWeightGrams": 2800, "consumptionType": "quick", "isAvailable": true, "proteinType": "Porc", "texture": "chop", "managementCategory": "base"},
-  {"id": "po_jambon_toupie", "sku": "PO051", "name": "Jambon Toupie (Tranché épais)", "format": "4 x 500g", "price": 48.00, "category": "Porc", "unitCount": 4, "totalWeightGrams": 2000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Porc", "texture": "deli", "managementCategory": "base"},
-  {"id": "po_osso_bucco", "sku": "PO052", "name": "Osso Bucco de Porc", "format": "8 x 350g", "price": 62.00, "category": "Porc", "unitCount": 8, "totalWeightGrams": 2800, "consumptionType": "slow", "isAvailable": true, "proteinType": "Porc", "texture": "piece", "managementCategory": "base"},
-  {"id": "po_effiloche", "sku": "PO053", "name": "Porc effiloché BBQ", "format": "6 x 400g", "price": 72.00, "category": "Porc", "unitCount": 6, "totalWeightGrams": 2400, "consumptionType": "quick", "isAvailable": true, "proteinType": "Porc", "texture": "prepared", "managementCategory": "base"},
-
-  // --- POISSON (Variété) ---
-  {"id": "f_821256", "sku": "821256", "name": "Pavé de saumon Atlantique", "format": "12 X 170G", "price": 95.90, "category": "Poisson/Fruits de mer", "unitCount": 12, "totalWeightGrams": 2040, "consumptionType": "staple", "isAvailable": true, "proteinType": "Poissons", "texture": "fillet", "managementCategory": "base"},
-  {"id": "f_truite", "sku": "821300", "name": "Filet de Truite Arc-en-ciel", "format": "10 X 200G", "price": 98.50, "category": "Poisson/Fruits de mer", "unitCount": 10, "totalWeightGrams": 2000, "consumptionType": "staple", "isAvailable": true, "proteinType": "Poissons", "texture": "fillet", "managementCategory": "base"},
-  {"id": "f_morue", "sku": "821301", "name": "Dos de Morue Islande", "format": "10 X 170G", "price": 115.00, "category": "Poisson/Fruits de mer", "unitCount": 10, "totalWeightGrams": 1700, "consumptionType": "staple", "isAvailable": true, "proteinType": "Poissons", "texture": "fillet", "managementCategory": "medium"},
-  {"id": "f_821347", "sku": "821347", "name": "Crevettes nordiques cuites", "format": "5 X 400G", "price": 134.40, "category": "Poisson/Fruits de mer", "unitCount": 5, "totalWeightGrams": 2000, "consumptionType": "staple", "isAvailable": true, "proteinType": "Fruits de mer", "texture": "small", "managementCategory": "base"},
-  {"id": "f_tigre", "sku": "821348", "name": "Crevettes Tigrées (Crues, 16-20)", "format": "2 X 908G", "price": 89.00, "category": "Poisson/Fruits de mer", "totalWeightGrams": 1816, "consumptionType": "quick", "isAvailable": true, "proteinType": "Fruits de mer", "texture": "shellfish", "managementCategory": "medium"},
-  {"id": "f_petoncle", "sku": "821349", "name": "Pétoncles Géants U-10", "format": "2 X 1KG", "price": 145.00, "category": "Poisson/Fruits de mer", "totalWeightGrams": 2000, "consumptionType": "quick", "isAvailable": true, "isPremium": true, "proteinType": "Fruits de mer", "texture": "shellfish", "managementCategory": "premium"},
-  {"id": "f_aiglefin", "sku": "F050", "name": "Filet d'Aiglefin (Haddock)", "format": "10 x 200g", "price": 85.00, "category": "Poisson/Fruits de mer", "unitCount": 10, "totalWeightGrams": 2000, "consumptionType": "staple", "isAvailable": true, "proteinType": "Poissons", "texture": "fillet", "managementCategory": "base"},
-  {"id": "f_sole", "sku": "F051", "name": "Filet de Sole", "format": "12 x 150g", "price": 72.00, "category": "Poisson/Fruits de mer", "unitCount": 12, "totalWeightGrams": 1800, "consumptionType": "staple", "isAvailable": true, "proteinType": "Poissons", "texture": "fillet", "managementCategory": "base"},
-  {"id": "f_coquille", "sku": "F052", "name": "Coquille St-Jacques (Prêt-à-cuire)", "format": "8 x 200g", "price": 95.00, "category": "Poisson/Fruits de mer", "unitCount": 8, "totalWeightGrams": 1600, "consumptionType": "quick", "isAvailable": true, "proteinType": "Fruits de mer", "texture": "prepared", "managementCategory": "premium"},
-  {"id": "f_turbot", "sku": "F053", "name": "Filet de Turbot", "format": "10 x 170g", "price": 110.00, "category": "Poisson/Fruits de mer", "unitCount": 10, "totalWeightGrams": 1700, "consumptionType": "staple", "isAvailable": true, "proteinType": "Poissons", "texture": "fillet", "managementCategory": "medium"},
-
-  // --- PRÊT-À-MANGER / EXTRA ---
-  {"id": "pm_821379", "sku": "821379", "name": "Lasagne à la viande", "format": "8 X 350G", "price": 118.70, "category": "Prêt-à-manger", "unitCount": 8, "totalWeightGrams": 2800, "consumptionType": "quick", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "prepared", "managementCategory": "base"},
-  {"id": "pm_pat", "sku": "821380", "name": "Pâté au Poulet (Format Familial)", "format": "4 X 800G", "price": 68.00, "category": "Prêt-à-manger", "unitCount": 4, "totalWeightGrams": 3200, "consumptionType": "quick", "isAvailable": true, "proteinType": "Volaille", "texture": "prepared", "managementCategory": "base"},
-  {"id": "pm_shep", "sku": "821381", "name": "Pâté Chinois (Shepherd's Pie)", "format": "8 X 400G", "price": 85.00, "category": "Prêt-à-manger", "unitCount": 8, "totalWeightGrams": 3200, "consumptionType": "quick", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "prepared", "managementCategory": "base"},
-  {"id": "pm_sauce", "sku": "821382", "name": "Sauce à Spaghetti (Viande)", "format": "4 X 1L", "price": 55.00, "category": "Prêt-à-manger", "totalWeightGrams": 4000, "consumptionType": "staple", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "liquid", "managementCategory": "base"},
-  {"id": "pm_tourtiere", "sku": "PM050", "name": "Tourtière du Lac", "format": "2 x 1.5kg", "price": 55.00, "category": "Prêt-à-manger", "unitCount": 2, "totalWeightGrams": 3000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Viande Rouge", "texture": "prepared", "managementCategory": "base"},
-  {"id": "pm_pizza", "sku": "PM051", "name": "Pizza Toute Garnie (12po)", "format": "5 unités", "price": 60.00, "category": "Prêt-à-manger", "unitCount": 5, "totalWeightGrams": 3000, "consumptionType": "quick", "isAvailable": true, "proteinType": "Autre", "texture": "prepared", "managementCategory": "base"},
-  {"id": "pm_quiche", "sku": "PM052", "name": "Quiche Lorraine", "format": "4 x 600g", "price": 48.00, "category": "Prêt-à-manger", "unitCount": 4, "totalWeightGrams": 2400, "consumptionType": "quick", "isAvailable": true, "proteinType": "Autre", "texture": "prepared", "managementCategory": "base"},
-  {"id": "pm_frites", "sku": "PM053", "name": "Frites Coupe Steak", "format": "4 x 2kg", "price": 32.00, "category": "Prêt-à-manger", "unitCount": 4, "totalWeightGrams": 8000, "consumptionType": "staple", "isAvailable": true, "proteinType": "Autre", "texture": "prepared", "managementCategory": "base"}
-];
+export const PRODUCT_CATALOG = []; // Vide par défaut, rempli par le contexte
